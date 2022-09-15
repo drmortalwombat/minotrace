@@ -14,175 +14,9 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include "gamemusic.h"
-
-char * const Screen	=	(char *)0xc000;
-char * const Screen2=	(char *)0xc400;
-char * const Font 	= 	(char *)0xc800;
-char * const Color	=	(char *)0xd800; 
-char * const Sprites =  (char *)0xd000;
-
-const char SpriteData[] = {
-	#embed spd_sprites lzo "minotrace.spd"
-};
-
-char bgrid[256 * 24];
-
-#pragma align(bgrid, 256)
-
-static const char smask0[] = {0x30, 0x33, 0xfc, 0xff};
-static const char smask1[] = {0x03, 0xcc, 0xcf, 0xff};
-
-RIRQCode	IRQFrame;
-
-__interrupt void irq_service(void);
-
-
-void init(void)
-{
-	mmap_trampoline();
-
-	mmap_set(MMAP_RAM);
-
-	oscar_expand_lzo(Sprites, SpriteData);
-
-	mmap_set(MMAP_NO_ROM);
-
-	music_init(TUNE_GAME);
-
-	rirq_init(true);
-
-	rirq_build(&IRQFrame, 2);
-	rirq_write(&IRQFrame, 0, &vic.memptr, 0x02);
-	rirq_call(&IRQFrame, 1, irq_service);
-
-	rirq_set(0, 250, &IRQFrame);
-
-	rirq_sort();
-	rirq_start();
-
-	memset(Screen, 32, 1000);
-	memset(Color, VCOL_WHITE + 8, 1000);
-	
-	vic_setmode(VICM_TEXT_MC, Screen, Font);
-
-	vic.color_border = VCOL_BLACK;
-	vic.color_back = VCOL_BLACK;
-	vic.color_back1 = VCOL_RED;
-	vic.color_back2 = VCOL_BLUE;
-
-	vic.spr_mcolor0 = VCOL_DARK_GREY;
-	vic.spr_mcolor1 = VCOL_WHITE;
-
-	spr_init(Screen);
-
-	for(int i=0; i<8; i++)
-	{
-		spr_set(i, true, 80 + 24 * i, 50, 64 + 12, VCOL_YELLOW, true, false, false);
-	}
-
-	char b[2] = {0x33, 0xcc};
-
-	for(char c=0; c<2; c++)
-	{
-		char	pc = 0x55 << c;
-
-		for(char s=0; s<7; s++)
-		{
-			char p[2];
-			if (s < 4)
-			{
-				p[0] = pc & smask0[s];
-				p[1] = pc & smask1[s];
-			}
-			else
-			{
-				p[0] = pc | smask0[s - 4];
-				p[1] = pc | smask1[s - 4];
-			}
-
-			for(char cy=0; cy<8; cy++)
-			{
-				for(char t=0; t<8; t++)
-				{
-					Font[8 * (cy + 0 + 16 * s + 128 * c) + t] = t > 7 - cy ? p[t & 1] : 0x00;
-					Font[8 * (cy + 8 + 16 * s + 128 * c) + t] = t <= cy ? p[t & 1] : b[t & 1];
-				}
-			}
-		}
-	}
-
-	for(char t=0; t<8; t++)
-		Font[8 * 112 + t] = b[t & 1];
-
-	sidfx_init();
-
-	sid.fmodevol = 15;
-}
-
-void done(void)
-{
-	getch();
-
-	vic_setmode(VICM_TEXT, (char *)0x0400, (char *)0x1000);
-}
-
-char	sindex;
-
-signed char	time[6] = {0, 3, 0, 0, 0, 0};
-
-void time_dec(void)
-{
-	if (--time[5] >= 0)
-		return;
-	time[5] = 9;
-
-	if (--time[4] >= 0)
-		return;
-	time[4] = 4;
-
-	if (--time[3] >= 0)
-		return;
-	time[3] = 9;
-
-	if (--time[2] >= 0)
-		return;
-	time[2] = 5;
-
-	if (--time[1] >= 0)
-		return;
-	time[1] = 9;
-
-	if (--time[0] >= 0)
-		return;
-	time[0] = 5;
-}
-
-void compass_draw(char w)
-{
-	char	*	sp = Screen + 0x3f8 + 8 * sindex;
-
-	sp[0] = 80 + (((w + 4) >> 3) & 7);
-}
-
-void time_draw(void)
-{
-	char	*	sp = Screen + 0x3f8 + 8 * sindex;
-
-	sp[1] = 64 + time[1];
-	sp[2] = 64 + 10;
-	sp[3] = 64 + time[2];
-	sp[4] = 64 + time[3];
-	sp[5] = 64 + 11;
-	sp[6] = 64 + time[4];
-	sp[7] = 64 + time[5];
-}
-
-__interrupt void irq_service(void)
-{
-	time_dec();
-	sidfx_loop_2();
-	music_play();
-}
+#include "raycast.h"
+#include "maze.h"
+#include "display.h"
 
 const SIDFX	SIDFXBounce[1] = {{
 	1000, 2048, 
@@ -195,284 +29,6 @@ const SIDFX	SIDFXBounce[1] = {{
 }};
 
 
-
-void drawColumn(char col, char height, char color)
-{
-	__asm
-	    {
-	    ldx     col
-
-	    lda     height
-	    lsr
-	    lsr
-	    lsr
-	    ora     #$e0
-	    sta     jp + 2
-
-	    lda		sindex
-	    sta 	jp + 1
-
-	    lda     height
-	    and     #7
-	    ora		#8
-	    ora		color
-	    tay
-
-	    lda     height
-	    lsr
-	    and     #7
-	    ora		color
-
-	jp:
-	    jmp     $e000
-
-	    }
-}
-
-void buildFastcode(void)
-{
-	for(int s=0; s<2; s++)
-	{
-		unsigned	sp = (unsigned)Screen + 0x0400 * s;
-
-	    for(int i=0; i<=16; i++)
-	    {
-	        char * dp = (char *)0xe000 + 256 * i + 128 * s;
-
-	        char yl = 8 - (i >> 1);
-	        char yh = 8 + i;
-
-	        if (yl > 0)
-	        {
-	            unsigned fp = sp + 40 * (yl - 1);
-	            dp += asm_ax(dp, ASM_STA, fp);
-	        }
-
-	        if (yl < yh)
-	        {
-		        dp += asm_im(dp, ASM_ORA, 0x0f);
-
-		        for(char j=yl; j<yh; j++)
-		        {
-		            unsigned fp = sp + 40 * j;
-		            dp += asm_ax(dp, ASM_STA, fp);
-		        }
-		    }
-
-	        if (yh < 25)
-	        {
-	        	dp += asm_np(dp, ASM_TYA);
-	            unsigned fp = sp + 40 * yh;
-	            dp += asm_ax(dp, ASM_STA, fp);
-	        }
-
-	        dp += asm_im(dp, ASM_LDA, 0x00);
-
-	        for(char j=0; j<yl - 1; j++)
-	        {
-	            unsigned fp =sp + 40 * j;
-	            dp += asm_ax(dp, ASM_STA, fp);
-	        }
-
-	        dp += asm_im(dp, ASM_LDA, 0x70);
-
-	        for(char j=yh + 1; j<25; j++)
-	        {
-	            unsigned fp = sp + 40 * j;
-	            dp += asm_ax(dp, ASM_STA, fp);
-		       }
-
-	       	dp += asm_np(dp, ASM_RTS);
-	    }
-	}
-}
-
-char	blut[136];
-char	inverse[4096] = {
-	255, 
-#assign i 1
-#repeat
-	(4096 / i > 255) ? 255 : 4096 / i,
-#assign i i + 1
-#until i == 4096
-#undef i
-};
-
-#pragma align(inverse, 256)
-
-
-char sqrtabl[256], sqrtabh[256];
-
-#pragma align(sqrtabl, 256)
-#pragma align(sqrtabh, 256)
-
-inline unsigned square(char c)
-{
-	return (unsigned)sqrtabl[c] | ((unsigned)sqrtabh[c] << 8);
-}
-
-inline unsigned mul88(char a, char b)
-{
-	unsigned	s = a + b;
-	if (s >= 256)
-	{
-		s &= 0xff;
-		return ((square(s) - square(a) - square(b)) >> 1) + (s << 8);
-	}
-	else
-		return (square(s) - square(a) - square(b)) >> 1;
-}
-
-inline char colheight(unsigned d, unsigned r)
-{
-	if (r >= 4096)
-		return 0;
-	else
-	{
-		unsigned	h = mul88(d, inverse[r]) >> 4;
-		if (h >= 256)
-			return 255;
-		else
-			return h;
-	}
-}
-
-char col_h[41], col_x[41], col_y[41], col_d[41];
-
-inline void dcast(char sx, char ix, char iy, unsigned irx, unsigned iry, signed char dix, signed char diy, unsigned idx, unsigned idy)
-{
-	const char	*	bp = bgrid + 256 * iy;
-
-	char	udx = idx >> 2, udy = idy >> 2;
-
-	signed char	id = (int)(mul88(irx, udy) - mul88(iry, udx)) >> 8;
-
-	for(;;)
-	{
-		while (id < 0)
-		{
-			ix += dix;
-
-			if (bp[ix])
-			{
-				col_x[sx] = ix;
-				col_y[sx] = (char)((unsigned)bp >> 8);
-				col_d[sx] = dix < 0 ? bp[ix] + 16 : bp[ix] + 32;
-				col_h[sx] = colheight(udx, irx);
-				return;
-			}
-
-			irx += 256;
-			id += udy;
-		}
-
-		while (id >= 0)
-		{
-			bp += 256 * diy;
-
-			if (bp[ix])
-			{
-				col_x[sx] = ix;
-				col_y[sx] = (char)((unsigned)bp >> 8);
-				col_d[sx] = diy < 0 ? bp[ix] + 0 : bp[ix] + 48;
-				col_h[sx] = colheight(udy, iry);
-				return;
-			}
-
-			iry += 256;
-			id -= udx;
-		}
-	}
-}
-
-void drawScreen(void)
-{
-    for(char x=0; x<40; x++)
-    {
-    	char w = col_h[x];
-
-   		if (w > 135)
-			w = 135;
-
-		drawColumn(x, w, col_d[x]);
-    }
-}
-
-inline void icast(char sx, int ipx, int ipy, int idx, int idy)
-{
-
-	char			ix = ipx >> 8, iy = ipy >> 8;
-
-	unsigned		irx = ipx & 255;
-	unsigned		iry = ipy & 255;
-
-	if (idx < 0)
-	{
-		if (idy < 0)
-		{
-			dcast(sx, ix, iy, irx, iry, -1, -1, -idx, -idy);
-		}
-		else
-		{
-			dcast(sx, ix, iy, irx, iry ^ 0xff, -1, 1, -idx, idy);
-		}
-	}
-	else
-	{
-		if (idy < 0)
-		{
-			dcast(sx, ix, iy, irx ^ 0xff, iry, 1, -1, idx, -idy);
-		}
-		else
-		{
-			dcast(sx, ix, iy, irx ^ 0xff, iry ^ 0xff, 1, 1, idx, idy);
-		}
-	}
-}
-
-void fcast(int ipx, int ipy, int idx, int idy, int iddx, int iddy)
-{
-	for(int i=0; i<40; i++)
-	{
-		icast(i, ipx, ipy, idx, idy);
-		idx += iddx;
-		idy += iddy;
-	}
-}
-
-void rfcast(int ipx, int ipy, int idx, int idy, int iddx, int iddy)
-{
-	icast(0, ipx, ipy, idx, idy);
-
-	for(int i=0; i<39; i+=2)
-	{
-		icast(i + 2, ipx, ipy, idx + 2 * iddx, idy + 2 * iddy);
-		if (col_x[i] == col_x[i + 2] && col_y[i] == col_y[i + 2] && col_d[i] == col_d[i + 2])
-		{
-			col_x[i + 1] = col_x[i];
-			col_y[i + 1] = col_y[i];
-			col_d[i + 1] = col_d[i];
-			col_h[i + 1] = (col_h[i] + col_h[i + 2]) >> 1;
-		}
-		else
-		{
-			icast(i + 1, ipx, ipy, idx + iddx, idy + iddy);			
-		}
-
-		idx += 2 * iddx;
-		idy += 2 * iddy;
-	}
-
-}
-
-static int sintab[64], costab[64];
-static int dsintab[64], dcostab[64];
-
-bool inside(int ipx, int ipy)
-{
-	char	ix = ipx >> 8, iy = ipy >> 8;
-	return bgrid[iy * 256 + ix] != 0;
-}
 
 void maze_print(void)
 {
@@ -846,20 +402,10 @@ int main(void)
 	maze_print();
 	return 0;
 #else
-	init();
+	display_init();
 
-    buildFastcode();
-
-	for(int i=0; i<64; i++)
-	{
-		float	f = 256 * sin(i * (PI / 32));
-		int j = (i + 48) & 63;
-		sintab[i] = f;
-		costab[j] = f;
-		dsintab[i] = f * 0.05;
-		dcostab[j] = f * 0.05;
-		vic.color_border++;
-	}
+    rcast_init_tables();
+    rcast_init_fastcode();
 
 	maze_build_5();
 	
@@ -919,22 +465,6 @@ int main(void)
 	int		ipx = px * 256, ipy = py * 256;
 	char	w = 0;
 
-	for(int i=0; i<136; i++)
-	{
-		int	t = 72 / (i + 8);
-		if (t > 6) t = 6;
-
-		blut[i] = 16 * (6 - t);
-	}
-
-	for(unsigned i=0; i<256; i++)
-	{
-		unsigned	s = i * i;
-		sqrtabl[i] = s & 0xff;
-		sqrtabh[i] = s >> 8;
-		vic.color_border++;
-	}
-
 //	vic.color_border = VCOL_GREEN;
 
 	music_patch_voice3(false);
@@ -953,11 +483,11 @@ int main(void)
 		int	idx = co + si, idy = si - co;
 		int	iddx = -dsintab[w], iddy = dcostab[w];
 
-		fcast(ipx, ipy, idx, idy, iddx, iddy);
+		rcast_cast_rays(ipx, ipy, idx, idy, iddx, iddy);
 
 		sindex ^= 0x80;
-		drawScreen();
-		rirq_data(&IRQFrame, 0, (sindex >> 3) | 2);
+		rcast_draw_screen();
+		display_flip();
 
 		time_draw();
 		compass_draw(w);
@@ -1009,14 +539,14 @@ int main(void)
 
 		bool	bounce = false;
 
-		if (vx > 0 && inside(ipx + wdist, ipy))
+		if (vx > 0 && maze_inside(ipx + wdist, ipy))
 		{
 			ipx = ((ipx + wdist) & 0xff00) - wdist;
 			if (vx > bspeed)
 				bounce = true;
 			vx = -(vx >> 1);
 		}
-		else if (vx < 0 && inside(ipx - wdist, ipy))
+		else if (vx < 0 && maze_inside(ipx - wdist, ipy))
 		{
 			ipx = ((ipx - wdist) & 0xff00) + (0x100 + wdist);
 			if (vx < -bspeed)
@@ -1024,14 +554,14 @@ int main(void)
 			vx = -vx >> 1;
 		}
 
-		if (vy > 0 && inside(ipx, ipy + wdist))
+		if (vy > 0 && maze_inside(ipx, ipy + wdist))
 		{
 			ipy = ((ipy + wdist) & 0xff00) - wdist;
 			if (vy > bspeed)
 				bounce = true;
 			vy = -(vy >> 1);
 		}
-		else if (vy < 0 && inside(ipx, ipy - wdist))
+		else if (vy < 0 && maze_inside(ipx, ipy - wdist))
 		{
 			ipy = ((ipy - wdist) & 0xff00) + (0x100 + wdist);
 			if (vy < -bspeed)
@@ -1094,7 +624,7 @@ int main(void)
 			ipy = ((ipy - 0x40) & 0xff00) + 0x140;
 	}
 #endif
-	done();
+//	done();
 #endif
 	return 0;
 }
