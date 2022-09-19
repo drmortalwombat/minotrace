@@ -93,7 +93,10 @@ void display_init(void)
 	}
 
 	for(char t=0; t<8; t++)
+	{
 		Font[8 * 112 + t] = b[t & 1];
+		Font[8 * 113 + t] = 255;
+	}
 
 	sidfx_init();
 
@@ -160,4 +163,46 @@ __interrupt void irq_service(void)
 void display_flip(void)
 {
 	rirq_data(&IRQFrame, 0, (sindex >> 3) | 2);
+}
+
+void display_put_bigtext(char x, char y, const char * text)
+{
+	mmap_set(MMAP_CHAR_ROM);
+
+	__assume(y < 25);
+	
+	char * ldp = Screen + (sindex << 3) + 40 * y + x;
+
+	char c;
+	while (c = *text++)
+	{
+		const char * sp = (char *)0xd000 + 8 * c;
+
+		char * dp = ldp;
+		for(char iy=0; iy<8; iy++)
+		{
+			char b = sp[iy];
+			for(char ix=0; ix<8; ix++)
+			{
+				if (b & 0x80)
+					dp[ix] = 113;
+				b <<= 1;
+			}
+			dp += 40;
+		}
+		ldp += 8;
+	}
+
+	mmap_set(MMAP_NO_ROM);
+}
+
+void display_scroll_left(void)
+{
+	for(char i=0; i<24; i++)
+	{
+		#pragma unroll(full)
+		for(char j=0; j<39; j++)
+			Screen[40 * i + j] = Screen[40 * i + j + 1];
+
+	}
 }

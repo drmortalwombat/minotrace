@@ -15,6 +15,10 @@ void compass_draw(char w);
 
 void time_draw(void);
 
+void display_put_bigtext(char x, char y, const char * text);
+
+void display_scroll_left(void);
+
 #pragma compile("display.c")
 
 #endif
