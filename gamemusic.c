@@ -9,7 +9,7 @@
 #pragma data(music)
 
 __export char music[] = {
-	#embed 0x2000 0x7e "MazeGame.sid" 
+	#embed 0x2000 0x7e "minotrace.sid" 
 };
 
 #pragma data(data)
@@ -38,7 +38,7 @@ void music_play(void)
 
 void music_patch_voice3(bool enable)
 {
-	*(char *)0xa152 = enable ? 0x20 : 0x4c;
+	*(char *)0xa156 = enable ? 0x20 : 0x4c;
 }
 
 void music_toggle(void)

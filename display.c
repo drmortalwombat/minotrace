@@ -13,10 +13,11 @@ const char SpriteData[] = {
 static const char smask0[] = {0x30, 0x33, 0xfc, 0xff};
 static const char smask1[] = {0x03, 0xcc, 0xcf, 0xff};
 
+bool time_running;
+
 RIRQCode	IRQFrame;
 
 __interrupt void irq_service(void);
-
 
 void display_init(void)
 {
@@ -28,7 +29,7 @@ void display_init(void)
 
 	mmap_set(MMAP_NO_ROM);
 
-	music_init(TUNE_GAME);
+	music_init(TUNE_GAME_2);
 
 	rirq_init(true);
 
@@ -104,33 +105,34 @@ void display_init(void)
 }
 
 
-signed char	time[6] = {0, 3, 0, 0, 0, 0};
+signed char	time_digits[5] = {0, 0, 0, 0, 0};
 
 void time_dec(void)
 {
-	if (--time[5] >= 0)
-		return;
-	time[5] = 9;
+	if (time_count > 0)
+	{
+		time_count--;
 
-	if (--time[4] >= 0)
-		return;
-	time[4] = 4;
+		if (--time_digits[4] >= 0)
+			return;
+		time_digits[4] = 9;
 
-	if (--time[3] >= 0)
-		return;
-	time[3] = 9;
+		if (--time_digits[3] >= 0)
+			return;
+		time_digits[3] = 4;
 
-	if (--time[2] >= 0)
-		return;
-	time[2] = 5;
+		if (--time_digits[2] >= 0)
+			return;
+		time_digits[2] = 9;
 
-	if (--time[1] >= 0)
-		return;
-	time[1] = 9;
+		if (--time_digits[1] >= 0)
+			return;
+		time_digits[1] = 5;
 
-	if (--time[0] >= 0)
-		return;
-	time[0] = 5;
+		if (--time_digits[0] >= 0)
+			return;
+		time_digits[0] = 9;
+	}
 }
 
 void compass_draw(char w)
@@ -144,18 +146,29 @@ void time_draw(void)
 {
 	char	*	sp = Screen + 0x3f8 + 8 * sindex;
 
-	sp[1] = 64 + time[1];
+	sp[1] = 64 + time_digits[0];
 	sp[2] = 64 + 10;
-	sp[3] = 64 + time[2];
-	sp[4] = 64 + time[3];
+	sp[3] = 64 + time_digits[1];
+	sp[4] = 64 + time_digits[2];
 	sp[5] = 64 + 11;
-	sp[6] = 64 + time[4];
-	sp[7] = 64 + time[5];
+	sp[6] = 64 + time_digits[3];
+	sp[7] = 64 + time_digits[4];
+}
+
+void time_init(unsigned seconds)
+{
+	time_count = seconds * 50;
+
+	time_digits[3] = time_digits[4] = 0;
+	time_digits[2] = seconds % 10; seconds /= 10;
+	time_digits[1] = seconds %  6; seconds /= 6;
+	time_digits[0] = seconds;
 }
 
 __interrupt void irq_service(void)
 {
-	time_dec();
+	if (time_running)
+		time_dec();
 	sidfx_loop_2();
 	music_play();
 }
@@ -170,7 +183,7 @@ void display_put_bigtext(char x, char y, const char * text)
 	mmap_set(MMAP_CHAR_ROM);
 
 	__assume(y < 25);
-	
+
 	char * ldp = Screen + (sindex << 3) + 40 * y + x;
 
 	char c;
@@ -198,11 +211,16 @@ void display_put_bigtext(char x, char y, const char * text)
 
 void display_scroll_left(void)
 {
-	for(char i=0; i<24; i++)
+	for(char j=0; j<39; j++)
 	{
 		#pragma unroll(full)
-		for(char j=0; j<39; j++)
+		for(char i=0; i<12; i++)
 			Screen[40 * i + j] = Screen[40 * i + j + 1];
-
+	}
+	for(char j=0; j<39; j++)
+	{
+		#pragma unroll(full)
+		for(char i=12; i<24; i++)
+			Screen[40 * i + j] = Screen[40 * i + j + 1];
 	}
 }

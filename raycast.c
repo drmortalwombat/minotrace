@@ -187,7 +187,7 @@ static char col_h[41], col_x[41], col_y[41], col_d[41];
 
 static inline void dcast(char sx, char ix, char iy, unsigned irx, unsigned iry, signed char dix, signed char diy, unsigned idx, unsigned idy)
 {
-	const char	*	bp = bgrid + 256 * iy;
+	const char	*	bp = maze_grid + 256 * iy;
 
 	char	udx = idx >> 2, udy = idy >> 2;
 
