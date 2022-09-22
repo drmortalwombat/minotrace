@@ -10,14 +10,63 @@ const char SpriteData[] = {
 	#embed spd_sprites lzo "minotrace.spd"
 };
 
+const char WallFontData[] = {
+	#embed ctm_chars "walls.ctm"
+};
+
 static const char smask0[] = {0x30, 0x33, 0xfc, 0xff};
 static const char smask1[] = {0x03, 0xcc, 0xcf, 0xff};
 
+
+
 bool time_running;
+signed char	time_digits[5];
 
 RIRQCode	IRQFrame;
 
 __interrupt void irq_service(void);
+
+static const char b[2] = {0xcc, 0x33};
+
+
+void display_font_expand(void)
+{
+	memcpy(Font, WallFontData, 32 * 8);
+
+	for(char c=0; c<12; c++)
+	{
+		const char * sp = WallFontData + 16 * 8 + 8 * c;
+
+		for(char cy=0; cy<8; cy++)
+		{
+			char * fp = Font + 8 * (cy + 16 * c + 64);
+
+			for(char t=0; t<8; t++)
+			{
+
+				if (t > 7 - cy)
+					fp[t + 64] = sp[t];
+				else if (t == 7 - cy)
+					fp[t + 64] = 0xff;
+				else
+					fp[t + 64] = 0x00;
+			}
+
+			for(char t=0; t<8; t++)
+			{
+				if (cy == 0)
+					fp[t] = sp[t];
+				else if (t < cy)
+					fp[t] = sp[t];
+				else if (t == cy)
+					fp[t] = 0x00;
+				else
+					fp[t] = b[t & 1];
+			}
+		}
+	}
+
+}
 
 void display_init(void)
 {
@@ -42,9 +91,9 @@ void display_init(void)
 	rirq_sort();
 	rirq_start();
 
-	memset(Screen, 32, 1000);
+	memset(Screen, 0, 1000);
 	memset(Color, VCOL_WHITE + 8, 1000);
-	
+
 	vic_setmode(VICM_TEXT_MC, Screen, Font);
 
 	vic.color_border = VCOL_BLACK;
@@ -62,50 +111,13 @@ void display_init(void)
 		spr_set(i, true, 80 + 24 * i, 50, 64 + 12, VCOL_YELLOW, true, false, false);
 	}
 
-	char b[2] = {0x33, 0xcc};
-
-	for(char c=0; c<2; c++)
-	{
-		char	pc = 0x55 << c;
-
-		for(char s=0; s<7; s++)
-		{
-			char p[2];
-			if (s < 4)
-			{
-				p[0] = pc & smask0[s];
-				p[1] = pc & smask1[s];
-			}
-			else
-			{
-				p[0] = pc | smask0[s - 4];
-				p[1] = pc | smask1[s - 4];
-			}
-
-			for(char cy=0; cy<8; cy++)
-			{
-				for(char t=0; t<8; t++)
-				{
-					Font[8 * (cy + 0 + 16 * s + 128 * c) + t] = t > 7 - cy ? p[t & 1] : 0x00;
-					Font[8 * (cy + 8 + 16 * s + 128 * c) + t] = t <= cy ? p[t & 1] : b[t & 1];
-				}
-			}
-		}
-	}
-
-	for(char t=0; t<8; t++)
-	{
-		Font[8 * 112 + t] = b[t & 1];
-		Font[8 * 113 + t] = 255;
-	}
+	display_font_expand();
 
 	sidfx_init();
 
 	sid.fmodevol = 15;
 }
 
-
-signed char	time_digits[5] = {0, 0, 0, 0, 0};
 
 void time_dec(void)
 {
@@ -198,7 +210,7 @@ void display_put_bigtext(char x, char y, const char * text)
 			for(char ix=0; ix<8; ix++)
 			{
 				if (b & 0x80)
-					dp[ix] = 113;
+					dp[ix] = 4;
 				b <<= 1;
 			}
 			dp += 40;

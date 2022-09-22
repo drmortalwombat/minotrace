@@ -29,7 +29,14 @@ char sqrtabl[256], sqrtabh[256];
 #pragma align(sqrtabh, 256)
 
 char	blut[136];
-
+char	clut[24] = {
+	0x00, 0x00, 0x00, 0x00, // Fake empty slot
+	0x40, 0x50, 0x60, 0x50,
+	0x70, 0x80, 0x90, 0x80,
+	0xa0, 0xb0, 0xc0, 0xb0,
+	0xd0, 0xe0, 0xf0, 0xe0,
+	0xe0, 0xe0, 0xe0, 0xe0
+};
 
 void rcast_init_tables(void)
 {
@@ -79,15 +86,19 @@ static void drawColumn(char col, char height, char color)
 
 	    lda     height
 	    and     #7
-	    ora		#8
+	    bne		w1
+	    ldy		#2
+	    bne		w2
+	w1:	    
 	    ora		color
 	    tay
+	w2:
 
 	    lda     height
 	    lsr
 	    and     #7
+	    ora		#8
 	    ora		color
-
 	jp:
 	    jmp     $e000
 
@@ -115,7 +126,7 @@ void rcast_init_fastcode(void)
 
 	        if (yl < yh)
 	        {
-		        dp += asm_im(dp, ASM_ORA, 0x0f);
+		        dp += asm_im(dp, ASM_AND, 0xf0);
 
 		        for(char j=yl; j<yh; j++)
 		        {
@@ -139,7 +150,7 @@ void rcast_init_fastcode(void)
 	            dp += asm_ax(dp, ASM_STA, fp);
 	        }
 
-	        dp += asm_im(dp, ASM_LDA, 0x70);
+	        dp += asm_im(dp, ASM_LDA, 0x03);
 
 	        for(char j=yh + 1; j<25; j++)
 	        {
@@ -203,7 +214,7 @@ static inline void dcast(char sx, char ix, char iy, unsigned irx, unsigned iry, 
 			{
 				col_x[sx] = ix;
 				col_y[sx] = (char)((unsigned)bp >> 8);
-				col_d[sx] = dix < 0 ? bp[ix] + 16 : bp[ix] + 32;
+				col_d[sx] = dix < 0 ? bp[ix] | 0 : bp[ix] | 2;
 				col_h[sx] = colheight(udx, irx);
 				return;
 			}
@@ -220,7 +231,7 @@ static inline void dcast(char sx, char ix, char iy, unsigned irx, unsigned iry, 
 			{
 				col_x[sx] = ix;
 				col_y[sx] = (char)((unsigned)bp >> 8);
-				col_d[sx] = diy < 0 ? bp[ix] + 0 : bp[ix] + 48;
+				col_d[sx] = diy < 0 ? bp[ix] | 1 : bp[ix] | 3;
 				col_h[sx] = colheight(udy, iry);
 				return;
 			}
@@ -240,7 +251,7 @@ void rcast_draw_screen(void)
    		if (w > 135)
 			w = 135;
 
-		drawColumn(x, w, col_d[x]);
+		drawColumn(x, w, clut[col_d[x]]);
     }
 }
 
@@ -278,6 +289,11 @@ inline void icast(char sx, int ipx, int ipy, int idx, int idy)
 
 void rcast_cast_rays(int ipx, int ipy, int idx, int idy, int iddx, int iddy)
 {
+	clut[20] ^= 0x10;
+	clut[21] ^= 0x10;
+	clut[22] ^= 0x10;
+	clut[23] ^= 0x10;
+
 	icast(0, ipx, ipy, idx, idy);
 
 	for(int i=0; i<39; i+=2)

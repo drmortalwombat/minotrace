@@ -90,9 +90,6 @@ struct PlayerStruct
 
 void maze_draw(void)
 {
-	for(char i=0; i<8; i++)
-		maze_grid[8 * 256 + i * 256 + 255] ^= 0x80;
-
 	char	w = Player.w;
 
 	int		co = costab[w], si = sintab[w];
@@ -112,13 +109,6 @@ void maze_flip(void)
 
 	time_draw();
 	compass_draw(Player.w);
-}
-
-
-void maze_flash_exit(void)
-{
-	for(char i=0; i<8; i++)
-		maze_grid[8 * 256 + i * 256 + maze_size - 1] ^= 0xc0;
 }
 
 void player_init(void)
@@ -326,7 +316,6 @@ void game_loop(void)
 			maze_flip();
 			player_control();
 			player_move();
-			maze_flash_exit();
 			if (time_count == 0)
 				game_advance(GC_TIMEOUT);
 			break;
@@ -334,7 +323,6 @@ void game_loop(void)
 			maze_draw();
 			maze_flip();
 			player_move();
-			maze_flash_exit();
 			break;
 		case GC_FINISHED:
 			break;

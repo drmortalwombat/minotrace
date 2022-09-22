@@ -28,7 +28,7 @@ void maze_preview(void)
 		{
 			char p = maze_grid[256 * j + i];
 			if (p)
-				p += 0x27;
+				p += 0x11;
 			Screen[40 * j + 39] = p;
 		}
 
@@ -156,7 +156,7 @@ void maze_build_1(unsigned size)
 					for(int j=0; j<size; j++)
 					{
 						if (maze_grid[i * 256 + j] > 0x80)
-							maze_grid[i * 256 + j] = 16 + 128 * (1 & ((i >> 2) ^ (j >> 2)));
+							maze_grid[i * 256 + j] = 4 + 4 * (1 & ((i >> 2) ^ (j >> 2)));
 						else
 						{
 							maze_grid[i * 256 + j] = 0;
@@ -169,6 +169,9 @@ void maze_build_1(unsigned size)
 						}
 					}
 				}
+
+				for(char i=0; i<8; i++)
+					maze_grid[8 * 256 + i * 256 + size - 1] = 20;
 
 				return;
 			}
