@@ -3,8 +3,8 @@
 
 extern char	sindex;
 
-extern int sintab[64], costab[64];
-extern int dsintab[64], dcostab[64];
+extern const int sintab[64], costab[64];
+extern const int dsintab[64], dcostab[64];
 
 
 void rcast_init_tables(void);

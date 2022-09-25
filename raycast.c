@@ -7,9 +7,27 @@
 #include "maze.h"
 #include "display.h"
 
-static int sintab[64], costab[64];
-static int dsintab[64], dcostab[64];
+//static int sintab[64], costab[64];
+//static int dsintab[64], dcostab[64];
 
+#pragma data(tables)
+
+const int sintab[64] = {
+	0, 25, 50, 74, 98, 121, 142, 162, 181, 198, 213, 226, 237, 245, 251, 255, 256, 255, 251, 245, 237, 226, 213, 198, 181, 162, 142, 121, 98, 74, 50, 25, 0, -25, -50, -74, -98, -121, -142, -162, -181, -198, -213, -226, -237, -245, -251, -255, -256, -255, -251, -245, -237, -226, -213, -198, -181, -162, -142, -121, -98, -74, -50, -25
+};
+
+const int costab[64] = {
+	256, 255, 251, 245, 237, 226, 213, 198, 181, 162, 142, 121, 98, 74, 50, 25, 0, -25, -50, -74, -98, -121, -142, -162, -181, -198, -213, -226, -237, -245, -251, -255, -256, -255, -251, -245, -237, -226, -213, -198, -181, -162, -142, -121, -98, -74, -50, -25, 0, 25, 50, 74, 98, 121, 142, 162, 181, 198, 213, 226, 237, 245, 251, 255
+};
+
+const int dsintab[64] = {
+	0, -1, -2, -4, -5, -6, -7, -8, -9, -10, -11, -11, -12, -12, -13, -13, -13, -13, -13, -12, -12, -11, -11, -10, -9, -8, -7, -6, -5, -4, -2, -1, 0, 1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 11, 12, 12, 13, 13, 13, 13, 13, 12, 12, 11, 11, 10, 9, 8, 7, 6, 5, 4, 2, 1
+};
+
+const int dcostab[64] = {
+	13, 13, 13, 12, 12, 11, 11, 10, 9, 8, 7, 6, 5, 4, 2, 1, 0, -1, -2, -4, -5, -6, -7, -8, -9, -10, -11, -11, -12, -12, -13, -13, -13, -13, -13, -12, -12, -11, -11, -10, -9, -8, -7, -6, -5, -4, -2, -1, 0, 1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 11, 12, 12, 13, 13
+};
+#pragma data(data)
 
 char	inverse[4096] = {
 	255, 
@@ -23,33 +41,44 @@ char	inverse[4096] = {
 
 #pragma align(inverse, 256)
 
+#pragma bss(dyntables)
 char sqrtabl[256], sqrtabh[256];
 
 #pragma align(sqrtabl, 256)
 #pragma align(sqrtabh, 256)
 
 char	blut[136];
-char	clut[24] = {
-	0x00, 0x00, 0x00, 0x00, // Fake empty slot
-	0x40, 0x50, 0x60, 0x50,
-	0x70, 0x80, 0x90, 0x80,
-	0xa0, 0xb0, 0xc0, 0xb0,
-	0xd0, 0xe0, 0xf0, 0xe0,
-	0xe0, 0xe0, 0xe0, 0xe0
+static char col_h[41], col_x[41], col_y[41], col_d[41];
+
+#pragma bss(bss)
+
+
+char	clut[4 * 8] = {
+	0x00, 0x00, 0x00, 0x00, 	// MF_EMPTY
+	0x30, 0x30, 0x30, 0x30,		// MF_EXIT
+	0xf0, 0xe0, 0xf0, 0xe0,		// MF_MINE
+	0x00, 0x00, 0x00, 0x00, 	// MF_DUMMY
+
+	0x40, 0x50, 0x60, 0x50,		// MF_RED
+	0x70, 0x80, 0x90, 0x80,		// MF_BLUE
+	0xa0, 0xb0, 0xc0, 0xb0,		// BF_PURPLE
+	0xd0, 0xe0, 0xf0, 0xe0,		// MF_WHITE
 };
 
 void rcast_init_tables(void)
 {
+#if 0
 	for(int i=0; i<64; i++)
 	{
 		float	f = 256 * sin(i * (PI / 32));
 		int j = (i + 48) & 63;
 		sintab[i] = f;
 		costab[j] = f;
-		dsintab[i] = f * 0.05;
+		dsintab[i] = - f * 0.05;
 		dcostab[j] = f * 0.05;
 		vic.color_border++;
 	}	
+#endif
 
 	for(unsigned i=0; i<256; i++)
 	{
@@ -194,8 +223,6 @@ static inline char colheight(unsigned d, unsigned r)
 	}
 }
 
-static char col_h[41], col_x[41], col_y[41], col_d[41];
-
 static inline void dcast(char sx, char ix, char iy, unsigned irx, unsigned iry, signed char dix, signed char diy, unsigned idx, unsigned idy)
 {
 	const char	*	bp = maze_grid + 256 * iy;
@@ -289,10 +316,10 @@ inline void icast(char sx, int ipx, int ipy, int idx, int idy)
 
 void rcast_cast_rays(int ipx, int ipy, int idx, int idy, int iddx, int iddy)
 {
-	clut[20] ^= 0x10;
-	clut[21] ^= 0x10;
-	clut[22] ^= 0x10;
-	clut[23] ^= 0x10;
+	clut[MF_MINE + 0] ^= 0x10;
+	clut[MF_MINE + 1] ^= 0x10;
+	clut[MF_MINE + 2] ^= 0x10;
+	clut[MF_MINE + 3] ^= 0x10;
 
 	icast(0, ipx, ipy, idx, idy);
 

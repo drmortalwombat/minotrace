@@ -6,18 +6,15 @@
 #include <c64/sprites.h>
 #include <c64/sid.h>
 
+#pragma data(sprites)
 const char SpriteData[] = {
 	#embed spd_sprites lzo "minotrace.spd"
 };
+#pragma data(data)
 
 const char WallFontData[] = {
 	#embed ctm_chars "walls.ctm"
 };
-
-static const char smask0[] = {0x30, 0x33, 0xfc, 0xff};
-static const char smask1[] = {0x03, 0xcc, 0xcf, 0xff};
-
-
 
 bool time_running;
 signed char	time_digits[5];
@@ -29,17 +26,29 @@ __interrupt void irq_service(void);
 static const char b[2] = {0xcc, 0x33};
 
 
+const char DataTitleBits[] = {
+	#embed 8000 0 lzo "titleimg.bin"
+};
+
+const char DataTitleColor0[] = {
+	#embed 1000 8000 lzo "titleimg.bin"
+};
+
+const char DataTitleColor1[] = {
+	#embed 1000 9000 lzo "titleimg.bin"
+};
+
 void display_font_expand(void)
 {
 	memcpy(Font, WallFontData, 32 * 8);
 
-	for(char c=0; c<12; c++)
+	for(char c=0; c<13; c++)
 	{
 		const char * sp = WallFontData + 16 * 8 + 8 * c;
 
 		for(char cy=0; cy<8; cy++)
 		{
-			char * fp = Font + 8 * (cy + 16 * c + 64);
+			char * fp = Font + 8 * (cy + 16 * c + 0x30);
 
 			for(char t=0; t<8; t++)
 			{
@@ -79,11 +88,13 @@ void display_init(void)
 	mmap_set(MMAP_NO_ROM);
 
 	music_init(TUNE_GAME_2);
+	sidfx_init();
+	sid.fmodevol = 15;	
 
 	rirq_init(true);
 
 	rirq_build(&IRQFrame, 2);
-	rirq_write(&IRQFrame, 0, &vic.memptr, 0x02);
+	rirq_write(&IRQFrame, 0, &vic.memptr, 0x06);
 	rirq_call(&IRQFrame, 1, irq_service);
 
 	rirq_set(0, 250, &IRQFrame);
@@ -91,33 +102,53 @@ void display_init(void)
 	rirq_sort();
 	rirq_start();
 
+	mmap_set(MMAP_RAM);
+
+	display_font_expand();
+
+	mmap_set(MMAP_NO_ROM);
+
+	spr_init(Screen);
+}
+
+void display_title(void)
+{
+	oscar_expand_lzo(Hires, DataTitleBits);
+
+	oscar_expand_lzo(Screen, DataTitleColor0);
+	oscar_expand_lzo(Color, DataTitleColor1);
+
+
+	vic_setmode(VICM_HIRES_MC, Screen, Hires);
+	rirq_data(&IRQFrame, 0, 0x28);
+
+	vic.color_border = VCOL_BLACK;
+	vic.color_back = VCOL_BLACK;
+
+	do {
+		joy_poll(0);
+	} while (!joyb[0]);
+}
+
+void display_game(void)
+{
 	memset(Screen, 0, 1000);
 	memset(Color, VCOL_WHITE + 8, 1000);
 
 	vic_setmode(VICM_TEXT_MC, Screen, Font);
+	rirq_data(&IRQFrame, 0, 0x26);
 
 	vic.color_border = VCOL_BLACK;
 	vic.color_back = VCOL_BLACK;
-	vic.color_back1 = VCOL_RED;
-	vic.color_back2 = VCOL_BLUE;
+	vic.color_back1 = VCOL_YELLOW;
+	vic.color_back2 = VCOL_LT_BLUE;
 
 	vic.spr_mcolor0 = VCOL_DARK_GREY;
 	vic.spr_mcolor1 = VCOL_WHITE;
 
-	spr_init(Screen);
-
 	for(int i=0; i<8; i++)
-	{
 		spr_set(i, true, 80 + 24 * i, 50, 64 + 12, VCOL_YELLOW, true, false, false);
-	}
-
-	display_font_expand();
-
-	sidfx_init();
-
-	sid.fmodevol = 15;
 }
-
 
 void time_dec(void)
 {
@@ -147,16 +178,21 @@ void time_dec(void)
 	}
 }
 
+static inline char * sprimg_base(void)
+{
+	return Screen + (sindex ? 0x0400 : 0x000) + 0x3f8;
+}
+
 void compass_draw(char w)
 {
-	char	*	sp = Screen + 0x3f8 + 8 * sindex;
+	char	*	sp = sprimg_base();
 
 	sp[0] = 80 + (((w + 4) >> 3) & 7);
 }
 
 void time_draw(void)
 {
-	char	*	sp = Screen + 0x3f8 + 8 * sindex;
+	char	*	sp = sprimg_base();;
 
 	sp[1] = 64 + time_digits[0];
 	sp[2] = 64 + 10;
@@ -187,8 +223,16 @@ __interrupt void irq_service(void)
 
 void display_flip(void)
 {
-	rirq_data(&IRQFrame, 0, (sindex >> 3) | 2);
+	rirq_data(&IRQFrame, 0, (sindex >> 3) | 0x26);
 }
+
+void display_reset(void)
+{
+	sindex = 0;
+	rirq_data(&IRQFrame, 0, 0x26);	
+	memset(Screen, 0, 1000);
+}
+
 
 void display_put_bigtext(char x, char y, const char * text)
 {
@@ -232,7 +276,7 @@ void display_scroll_left(void)
 	for(char j=0; j<39; j++)
 	{
 		#pragma unroll(full)
-		for(char i=12; i<24; i++)
+		for(char i=12; i<25; i++)
 			Screen[40 * i + j] = Screen[40 * i + j + 1];
 	}
 }

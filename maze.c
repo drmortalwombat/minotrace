@@ -3,16 +3,36 @@
 #include <c64/vic.h>
 #include <math.h>
 
-char 			maze_grid[256 * 24];
+char 			maze_grid[256 * 25];
 extern unsigned maze_size;
+
+static unsigned maze_seed = 31232;
+
+unsigned int maze_rand(void)
+{
+    maze_seed ^= maze_seed << 7;
+    maze_seed ^= maze_seed >> 9;
+    maze_seed ^= maze_seed << 8;
+	return maze_seed;
+}
 
 
 bool maze_inside(int ipx, int ipy)
 {
 	char	ix = ipx >> 8, iy = ipy >> 8;
-	return maze_grid[iy * 256 + ix] != 0;
+	return maze_grid[iy * 256 + ix] >= MF_RED;
 }
 
+MazeFields maze_field(int ipx, int ipy)
+{
+	char	ix = ipx >> 8, iy = ipy >> 8;
+	return (MazeFields)(maze_grid[iy * 256 + ix]);
+}
+
+static const char mazelut[] = {
+	0x10, 0x06, 0x05, 0x00,
+	0x12, 0x15, 0x18, 0x1b
+};
 
 void maze_preview(void)
 {
@@ -24,12 +44,10 @@ void maze_preview(void)
 		display_scroll_left();
 
 		#pragma unroll(full)
-		for(char j=0; j<24; j++)
+		for(char j=0; j<25; j++)
 		{
 			char p = maze_grid[256 * j + i];
-			if (p)
-				p += 0x11;
-			Screen[40 * j + 39] = p;
+			Screen[40 * j + 39] = mazelut[p >> 2];
 		}
 
 		vic_waitBottom();
@@ -44,7 +62,7 @@ void maze_preview(void)
 		display_scroll_left();
 
 		#pragma unroll(full)
-		for(char j=0; j<24; j++)
+		for(char j=0; j<25; j++)
 			Screen[40 * j + 39] = 0;
 
 		vic_waitBottom();
@@ -57,11 +75,13 @@ void maze_preview(void)
 
 void maze_print(void)
 {
-	for(int i=0; i<256; i++)
+	for(int i=0; i<maze_size; i++)
 	{
-		for(int j=0; j<24; j++)
+		for(int j=0; j<25; j++)
 		{
-			if (maze_grid[i + 256 * j] >= 0x10)
+			if (maze_grid[i + 256 * j] == MF_MINE)
+				printf("X");
+			else if (maze_grid[i + 256 * j] > 0)
 				printf("#");
 			else
 				printf(".");
@@ -113,29 +133,61 @@ bool maze_check_3(int p, char d)
 		maze_grid[p2 + d1] >= 0xfe;
 }
 
-void maze_build_1(unsigned size)
+void maze_build_border(unsigned size, char fill, char border)
 {
-	memset(maze_grid, 0xff, 24 * 256);
+	memset(maze_grid, fill, 25 * 256);
 	maze_size = size;
 
 	for(int i=0; i<24; i++)
 	{
-		maze_grid[i * 256 + 0] = 0xfe;
-		maze_grid[i * 256 + size - 1] = 0xfe;
+		maze_grid[i * 256 + 0] = border;
+		maze_grid[i * 256 + size - 1] = border;
 	}
 
 	for(int i=0; i<256; i++)
 	{
-		maze_grid[i] = 0xfe;
-		maze_grid[i + 256 * 23] = 0xfe;
+		maze_grid[i] = border;
+		maze_grid[i + 256 * 24] = border;
+	}
+}
+
+void maze_build_exit(void)
+{
+	for(char i=0; i<8; i++)
+		maze_grid[8 * 256 + i * 256 + maze_size - 1] = MF_EXIT;
+	maze_grid[11 * 256 + 1] = MF_EMPTY;
+	maze_grid[12 * 256 + 1] = MF_EMPTY;	
+}
+
+void maze_build_minefield(unsigned size)
+{
+	maze_build_border(size, MF_EMPTY, MF_PURPLE);
+
+	for(unsigned i=1; i<size-1; i++)
+	{
+		for(char j=0; j<8; j++)
+		{
+			char x = rand() % 23 + 1;
+			maze_grid[256 * x + i] = MF_RED + 4 * (j & 1);
+		}
+
+		char x = rand() % 23 + 1;
+		maze_grid[256 * x + i] = MF_MINE;
 	}
 
-	int	p = 256 * 12 + 1;
+	maze_build_exit();
+}
+
+void maze_build_1(unsigned size)
+{
+	maze_build_border(size, 0xff, 0xfe);
+
+	int	p = 256 * 12 + size / 2;
 	maze_grid[p] = 0xfc;
 
 	for(;;)
 	{
-		char d = rand() & 3;
+		char d = maze_rand() & 3;
 
 		char i = 0;
 		while (i < 4 && !maze_check(p, d))
@@ -151,28 +203,26 @@ void maze_build_1(unsigned size)
 			{
 				maze_grid[p] = 0;
 
-				for(int i=0; i<24; i++)
+				for(int i=0; i<25; i++)
 				{
 					for(int j=0; j<size; j++)
 					{
 						if (maze_grid[i * 256 + j] > 0x80)
-							maze_grid[i * 256 + j] = 4 + 4 * (1 & ((i >> 2) ^ (j >> 2)));
+							maze_grid[i * 256 + j] = MF_RED + 4 * (1 & ((i >> 2) ^ (j >> 2)));
 						else
 						{
-							maze_grid[i * 256 + j] = 0;
-							maze_grid[i * 256 + j - 256] = 0;
+							maze_grid[i * 256 + j] = MF_EMPTY;
+							maze_grid[i * 256 + j - 256] = MF_EMPTY;
 							if (j > 1)
 							{
-								maze_grid[i * 256 + j - 1] = 0;
-								maze_grid[i * 256 + j - 257] = 0;
+								maze_grid[i * 256 + j - 1] = MF_EMPTY;
+								maze_grid[i * 256 + j - 257] = MF_EMPTY;
 							}
 						}
 					}
 				}
 
-				for(char i=0; i<8; i++)
-					maze_grid[8 * 256 + i * 256 + size - 1] = 20;
-
+				maze_build_exit();
 				return;
 			}
 		}
@@ -374,3 +424,12 @@ void maze_build_6(void)
 	}
 }
 
+
+void maze_build(const MazeInfo * info)
+{
+	maze_seed = info->seed;
+	maze_build_1(info->size + 2);
+
+	vic.color_back1 = info->colors >> 4;
+	vic.color_back2 = info->colors & 0x0f;
+}
