@@ -3,6 +3,18 @@
 
 #include "gamemusic.h"
 
+enum MazeGenerator
+{
+	MGEN_LABYRINTH_1,
+	MGEN_LABYRINTH_3,
+	MGEN_DOORS,
+	MGEN_MINEFIELD,
+	MGEN_GATES,
+	MGEN_CURVES_1,
+	MGEN_CURVES_2,
+	MGEN_CROSS
+};
+
 enum MazeFields
 {
 	MF_EMPTY = 0,
@@ -18,11 +30,12 @@ enum MazeFields
 
 struct MazeInfo
 {
-	unsigned	seed;
-	char		size;
-	char		colors;
-	Tune		tune;
-	char		time;
+	MazeGenerator	gen;
+	unsigned		seed;
+	char			size;
+	char			colors;
+	Tune			tune;
+	char			time;
 };
 
 extern char 	maze_grid[256 * 25];
@@ -38,12 +51,6 @@ inline MazeFields maze_field(int ipx, int ipy);
 void maze_preview(void);
 
 void maze_print(void);
-
-void maze_build_1(unsigned size);
-
-void maze_build_5(unsigned size);
-
-void maze_build_minefield(unsigned size);
 
 void maze_build(const MazeInfo * info);
 

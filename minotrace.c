@@ -151,6 +151,8 @@ void player_control(void)
 		Player.acc = 128;
 	else if (joyy[0] > 0)
 		Player.acc = -32;
+	else if (joyy[0] < 0)
+		Player.acc = 32;
 	else
 		Player.acc = 0;	
 }
@@ -228,22 +230,22 @@ void player_move(void)
 struct MazeInfo	Levels[4] = 
 {
 	{
-		0xa321,
+		MGEN_LABYRINTH_3, 0xa321,
 		34, (VCOL_GREEN << 4) | VCOL_PURPLE,
-		TUNE_GAME_1, 20
+		TUNE_GAME_4, 20
 	},
 	{
-		0x2482,
+		MGEN_LABYRINTH_3, 0x2482,
 		66, (VCOL_RED << 4) | VCOL_BLUE,
 		TUNE_GAME_1, 30
 	},
 	{
-		0x9812,
+		MGEN_LABYRINTH_3, 0x9812,
 		98, (VCOL_MED_GREY << 4) | VCOL_LT_BLUE,
 		TUNE_GAME_2, 60
 	},
 	{
-		0xfe12,
+		MGEN_LABYRINTH_3, 0xfe12,
 		126, (VCOL_YELLOW << 4) | VCOL_CYAN,
 		TUNE_GAME_3, 120
 	},

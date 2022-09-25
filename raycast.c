@@ -85,7 +85,7 @@ void rcast_init_tables(void)
 		unsigned	s = i * i;
 		sqrtabl[i] = s & 0xff;
 		sqrtabh[i] = s >> 8;
-		vic.color_border++;
+//		vic.color_border++;
 	}
 
 	for(int i=0; i<136; i++)

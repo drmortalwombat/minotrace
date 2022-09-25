@@ -81,6 +81,9 @@ void display_init(void)
 {
 	mmap_trampoline();
 
+	vic.ctrl1 = VIC_CTRL1_RSEL + 3;
+	vic_waitBottom();
+
 	mmap_set(MMAP_RAM);
 
 	oscar_expand_lzo(Sprites, SpriteData);
@@ -113,17 +116,21 @@ void display_init(void)
 
 void display_title(void)
 {
+	vic_waitBottom();
+	vic.ctrl1 = VIC_CTRL1_RSEL + 3;
+	vic_waitTop();
+	vic_waitBottom();
+
 	oscar_expand_lzo(Hires, DataTitleBits);
 
 	oscar_expand_lzo(Screen, DataTitleColor0);
 	oscar_expand_lzo(Color, DataTitleColor1);
 
+	vic.color_border = VCOL_BLACK;
+	vic.color_back = VCOL_BLACK;
 
 	vic_setmode(VICM_HIRES_MC, Screen, Hires);
 	rirq_data(&IRQFrame, 0, 0x28);
-
-	vic.color_border = VCOL_BLACK;
-	vic.color_back = VCOL_BLACK;
 
 	do {
 		joy_poll(0);
@@ -132,8 +139,15 @@ void display_title(void)
 
 void display_game(void)
 {
+	vic_waitBottom();
+	vic.ctrl1 = VIC_CTRL1_RSEL + 3;
+	vic_waitTop();
+	vic_waitBottom();
+
 	memset(Screen, 0, 1000);
 	memset(Color, VCOL_WHITE + 8, 1000);
+
+	vic_waitBottom();
 
 	vic_setmode(VICM_TEXT_MC, Screen, Font);
 	rirq_data(&IRQFrame, 0, 0x26);
@@ -278,5 +292,21 @@ void display_scroll_left(void)
 		#pragma unroll(full)
 		for(char i=12; i<25; i++)
 			Screen[40 * i + j] = Screen[40 * i + j + 1];
+	}
+}
+
+void display_scroll_right(void)
+{
+	for(signed char j=38; j>=0; j--)
+	{
+		#pragma unroll(full)
+		for(char i=0; i<12; i++)
+			Screen[40 * i + j + 1] = Screen[40 * i + j];
+	}
+	for(signed char j=38; j>=0; j--)
+	{
+		#pragma unroll(full)
+		for(char i=12; i<25; i++)
+			Screen[40 * i + j + 1] = Screen[40 * i + j];
 	}
 }
