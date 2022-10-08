@@ -16,6 +16,7 @@ enum Tune
 	TUNE_GAME_2,
 	TUNE_GAME_3,
 	TUNE_GAME_4,
+	TUNE_RESTART
 };
 
 void music_init(Tune tune);

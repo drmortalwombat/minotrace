@@ -46,6 +46,8 @@ extern unsigned maze_size;
 
 inline bool maze_inside(int ipx, int ipy);
 
+inline void maze_set(int ipx, int ipy, MazeFields f);
+
 inline MazeFields maze_field(int ipx, int ipy);
 
 void maze_preview(void);

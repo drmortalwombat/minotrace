@@ -147,47 +147,49 @@ void rcast_init_fastcode(void)
 	        char yl = 8 - (i >> 1);
 	        char yh = 8 + i;
 
+	        char di = 0;
+
 	        if (yl > 0)
 	        {
 	            unsigned fp = sp + 40 * (yl - 1);
-	            dp += asm_ax(dp, ASM_STA, fp);
+	            di += asm_ax(dp + di, ASM_STA, fp);
 	        }
 
 	        if (yl < yh)
 	        {
-		        dp += asm_im(dp, ASM_AND, 0xf0);
+		        di += asm_im(dp + di, ASM_AND, 0xf0);
 
 		        for(char j=yl; j<yh; j++)
 		        {
 		            unsigned fp = sp + 40 * j;
-		            dp += asm_ax(dp, ASM_STA, fp);
+		            di += asm_ax(dp + di, ASM_STA, fp);
 		        }
 		    }
 
 	        if (yh < 25)
 	        {
-	        	dp += asm_np(dp, ASM_TYA);
+	        	di += asm_np(dp + di, ASM_TYA);
 	            unsigned fp = sp + 40 * yh;
-	            dp += asm_ax(dp, ASM_STA, fp);
+	            di += asm_ax(dp + di, ASM_STA, fp);
 	        }
 
-	        dp += asm_im(dp, ASM_LDA, 0x00);
+	        di += asm_im(dp + di, ASM_LDA, 0x00);
 
 	        for(char j=0; j<yl - 1; j++)
 	        {
 	            unsigned fp =sp + 40 * j;
-	            dp += asm_ax(dp, ASM_STA, fp);
+	            di += asm_ax(dp + di, ASM_STA, fp);
 	        }
 
-	        dp += asm_im(dp, ASM_LDA, 0x03);
+	        di += asm_im(dp + di, ASM_LDA, 0x03);
 
 	        for(char j=yh + 1; j<25; j++)
 	        {
 	            unsigned fp = sp + 40 * j;
-	            dp += asm_ax(dp, ASM_STA, fp);
-		       }
+	            di += asm_ax(dp + di, ASM_STA, fp);
+		    }
 
-	       	dp += asm_np(dp, ASM_RTS);
+	       	di += asm_np(dp + di, ASM_RTS);
 	    }
 	}
 }

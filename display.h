@@ -25,6 +25,15 @@ extern bool 		time_running;
 extern unsigned 	time_count;
 extern signed char	time_digits[5];
 
+enum BlockChar
+{
+	BC_BLACK 	= 	0,
+	BC_GREY		=	3,
+	BC_WHITE	=	4,
+	BC_BLUE		=	19,
+
+};
+
 void display_init(void);
 
 void display_game(void);
@@ -41,12 +50,15 @@ void time_draw(void);
 
 void time_init(unsigned seconds);
 
-void display_put_bigtext(char x, char y, const char * text);
+void display_put_bigtext(char x, char y, const char * text, BlockChar c);
 
 void display_scroll_left(void);
 
 void display_scroll_right(void);
 
+void display_five_star(char t);
+
+void display_explosion(void);
 
 #pragma compile("display.c")
 

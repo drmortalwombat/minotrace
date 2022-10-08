@@ -19,6 +19,7 @@
 #include "display.h"
 
 #pragma stacksize(1024)
+#pragma heapsize(0)
 
 const SIDFX	SIDFXBounce[1] = {{
 	1000, 2048, 
@@ -28,6 +29,15 @@ const SIDFX	SIDFXBounce[1] = {{
 	-20, 0,
 	4, 20,
 	3
+}};
+
+const SIDFX	SIDFXExplosion[1] = {{
+	3000, 1000, 
+	SID_CTRL_GATE | SID_CTRL_NOISE,
+	SID_ATK_2 | SID_DKY_6,
+	0xf0  | SID_DKY_3000,
+	-10, 0,
+	8, 120
 }};
 
 const SIDFX	SIDFXBeepShort[1] = {{
@@ -68,17 +78,18 @@ enum GameStates
 	GS_BUILD,
 	GS_REVEAL,
 	GS_READY,
-	GC_RACE,
-	GC_TIMEOUT,
-	GC_EXPLOSION,
-	GC_FINISHED,
-	GC_GAMEOVER,
+	GS_RACE,
+	GS_TIMEOUT,
+	GS_EXPLOSION,
+	GS_FINISHED,
+	GS_RETRY,
+	GS_GAMEOVER,
 
 	NUM_GAME_STATES
 }	GameState;
 
 int		GameTime;
-char	GameLevel;
+char	GameLevel, GameSelect;
 
 struct PlayerStruct
 {
@@ -227,27 +238,168 @@ void player_move(void)
 
 }
 
-struct MazeInfo	Levels[4] = 
+struct MazeInfo	Levels[] = 
 {
 	{
-		MGEN_LABYRINTH_3, 0xa321,
+		MGEN_CURVES_1, 0xa321,
 		34, (VCOL_GREEN << 4) | VCOL_PURPLE,
+		TUNE_GAME_2, 20
+	},
+
+	{
+		MGEN_CURVES_2, 0xa321,
+		33, (VCOL_RED << 4) | VCOL_BLUE,
+		TUNE_GAME_2, 20
+	},
+
+	{
+		MGEN_GATES, 0xa321,
+		33, (VCOL_YELLOW << 4) | VCOL_ORANGE,
+		TUNE_GAME_3, 20
+	},
+
+	{
+		MGEN_CURVES_1, 0xa321,
+		66, (VCOL_LT_BLUE << 4) | VCOL_GREEN,
+		TUNE_GAME_3, 35
+	},
+
+	{
+		MGEN_DOORS, 0xa321,
+		35, (VCOL_LT_GREEN << 4) | VCOL_MED_GREY,
 		TUNE_GAME_4, 20
 	},
+
+	{
+		MGEN_MINEFIELD, 0xa321,
+		34, (VCOL_CYAN << 4) | VCOL_BLUE,
+		TUNE_GAME_2, 20
+	},
+
+	{
+		MGEN_CURVES_2, 0xa321,
+		65, (VCOL_ORANGE << 4) | VCOL_LT_BLUE,
+		TUNE_GAME_3, 35
+	},
+
+	{
+		MGEN_GATES, 0x1781,
+		66, (VCOL_PURPLE<< 4) | VCOL_YELLOW,
+		TUNE_GAME_4, 30
+	},
+
+	{
+		MGEN_LABYRINTH_3, 0xa321,
+		34, (VCOL_DARK_GREY << 4) | VCOL_RED,
+		TUNE_GAME_2, 20
+	},
+
+	{
+		MGEN_LABYRINTH_1, 0xf921,
+		20, (VCOL_YELLOW << 4) | VCOL_PURPLE,
+		TUNE_GAME_3, 30
+	},
+
+	{
+		MGEN_DOORS, 0x4521,
+		55, (VCOL_CYAN << 4) | VCOL_ORANGE,
+		TUNE_GAME_4, 30
+	},
+
+	{
+		MGEN_CURVES_1, 0xa321,
+		130, (VCOL_BLUE << 4) | VCOL_MED_GREY,
+		TUNE_GAME_4, 45
+	},
+
+	{
+		MGEN_CURVES_2, 0xa321,
+		129, (VCOL_YELLOW << 4) | VCOL_RED,
+		TUNE_GAME_1, 65
+	},
+
+	{
+		MGEN_CURVES_1, 0xa321,
+		226, (VCOL_GREEN << 4) | VCOL_BLUE,
+		TUNE_GAME_1, 80
+	},
+
+	{
+		MGEN_GATES, 0x9fb2,
+		132, (VCOL_LT_BLUE << 4) | VCOL_MED_GREY,
+		TUNE_GAME_3, 55
+	},
+
 	{
 		MGEN_LABYRINTH_3, 0x2482,
 		66, (VCOL_RED << 4) | VCOL_BLUE,
-		TUNE_GAME_1, 30
+		TUNE_GAME_3, 30
 	},
+
+	{
+		MGEN_LABYRINTH_1, 0xa321,
+		34, (VCOL_GREEN << 4) | VCOL_PURPLE,
+		TUNE_GAME_4, 60
+	},
+
+	{
+		MGEN_MINEFIELD, 0x7951,
+		34, (VCOL_GREEN << 4) | VCOL_RED,
+		TUNE_GAME_3, 30
+	},
+
+	{
+		MGEN_LABYRINTH_1, 0x2197,
+		52, (VCOL_LT_GREEN<< 4) | VCOL_DARK_GREY,
+		TUNE_GAME_4, 70
+	},
+
 	{
 		MGEN_LABYRINTH_3, 0x9812,
 		98, (VCOL_MED_GREY << 4) | VCOL_LT_BLUE,
 		TUNE_GAME_2, 60
 	},
+
+	{
+		MGEN_DOORS, 0x7491,
+		105, (VCOL_GREEN << 4) | VCOL_PURPLE,
+		TUNE_GAME_1, 60
+	},
+
+	{
+		MGEN_GATES, 0xe8b1,
+		252, (VCOL_YELLOW << 4) | VCOL_CYAN,
+		TUNE_GAME_1, 105
+	},
+
+	{
+		MGEN_MINEFIELD, 0xa952,
+		100, (VCOL_DARK_GREY << 4) | VCOL_ORANGE,
+		TUNE_GAME_1, 120
+	},
+
+	{
+		MGEN_CURVES_2, 0xa321,
+		225, (VCOL_GREEN << 4) | VCOL_PURPLE,
+		TUNE_GAME_1, 90
+	},
+
 	{
 		MGEN_LABYRINTH_3, 0xfe12,
 		126, (VCOL_YELLOW << 4) | VCOL_CYAN,
-		TUNE_GAME_3, 120
+		TUNE_GAME_1, 90
+	},
+
+	{
+		MGEN_LABYRINTH_3, 0xfe12,
+		254, (VCOL_ORANGE << 4) | VCOL_LT_GREEN,
+		TUNE_GAME_1, 180
+	},
+
+	{
+		MGEN_LABYRINTH_1, 0xcf1d,
+		100, (VCOL_RED << 4) | VCOL_BLUE,
+		TUNE_GAME_1, 240
 	},
 };
 
@@ -269,32 +421,44 @@ void game_advance(GameStates state)
 				break;
 			case GS_BUILD:
 				maze_build(Levels + GameLevel);
+				music_patch_voice3(false);				
 				music_init(Levels[GameLevel].tune);
+				time_running = false;
+				time_init(Levels[GameLevel].time);
+				time_draw();
 				state = GS_REVEAL;
 				break;
 			case GS_REVEAL:
 				break;
 			case GS_READY:
 				player_init();
-				time_running = false;
-				time_init(Levels[GameLevel].time);
 				GameTime = 0;
 				break;
-			case GC_RACE:
+			case GS_RACE:
 				time_running = true;
 				break;
-			case GC_EXPLOSION:
+			case GS_EXPLOSION:
+				sidfx_play(2, SIDFXExplosion, 10);
+				maze_set(Player.ipx, Player.ipy, MF_EMPTY);
+				display_explosion();
 				GameTime = 0;
 				break;
-			case GC_TIMEOUT:
+			case GS_TIMEOUT:
 				GameTime = 0;
 				Player.acc = 0;
 				break;
-			case GC_FINISHED:
+			case GS_FINISHED:
 				GameTime = 0;
 				Player.acc = 0;
 				break;
-			case GC_GAMEOVER:
+			case GS_RETRY:
+				music_patch_voice3(true);
+				music_init(TUNE_RESTART);
+				GameTime = 0;
+				GameSelect = 0;
+				Player.acc = 0;
+				break;			
+			case GS_GAMEOVER:
 				break;
 		}
 
@@ -312,6 +476,14 @@ void game_loop(void)
 		case GS_INTRO:
 			break;
 		case GS_REVEAL:
+			{
+				char	t[3];
+				t[0] = '0' + (GameLevel + 1) / 10;
+				t[1] = '0' + (GameLevel + 1) % 10;
+				t[2] = 0;
+				display_put_bigtext(8, 4, s"lvl", BC_WHITE);
+				display_put_bigtext(12, 14, t, BC_WHITE);
+			}
 			maze_preview();
 			game_advance(GS_READY);
 			break;
@@ -323,18 +495,18 @@ void game_loop(void)
 				sidfx_play(2, SIDFXBeepLong, 1);
 
 			if (GameTime < 25)
-				display_put_bigtext(0, 10, s"ready");
+				display_put_bigtext(0, 10, s"ready", BC_WHITE);
 			else if (GameTime < 50)
-				display_put_bigtext(8, 10, s"set");
+				display_put_bigtext(8, 10, s"set", BC_WHITE);
 			else if (GameTime < 60)
-				display_put_bigtext(12, 10, s"go");
+				display_put_bigtext(12, 10, s"go", BC_WHITE);
 			else
-				game_advance(GC_RACE);
+				game_advance(GS_RACE);
 			maze_flip();
 			player_control();
 			GameTime++;
 			break;
-		case GC_RACE:
+		case GS_RACE:
 			maze_draw();
 
 			if (time_count < 50 * 10)
@@ -344,7 +516,7 @@ void game_loop(void)
 					char	t[2];
 					t[0] = time_digits[2] + '0';
 					t[1] = 0;
-					display_put_bigtext(16, 10, t);
+					display_put_bigtext(16, 10, t, BC_WHITE);
 					if (!game_beep)
 					{
 						sidfx_play(2, SIDFXBeepHurry, 1);
@@ -359,28 +531,49 @@ void game_loop(void)
 			player_control();
 			player_move();
 			if (time_count == 0)
-				game_advance(GC_TIMEOUT);
+				game_advance(GS_TIMEOUT);
 			else
 			{
 				MazeFields	field = maze_field(Player.ipx, Player.ipy);
 				if (field == MF_EXIT)
-					game_advance(GC_FINISHED);
+					game_advance(GS_FINISHED);
 				else if (field == MF_MINE)
-					game_advance(GC_EXPLOSION);
+					game_advance(GS_EXPLOSION);
 			}
 			break;
-		case GC_EXPLOSION:
-			if (GameTime == 60)
+		case GS_EXPLOSION:
+			if (GameTime == 30)
 			{
-				display_reset();
-				game_advance(GS_REVEAL);				
+				joy_poll(0);
+				if (!joyb[0])
+					game_advance(GS_RETRY);				
 			}
 			else
 			{
 				maze_draw();
 
-				display_put_bigtext(4, 4, s"boom");
-				display_put_bigtext(0, 13, s"crash");
+				display_put_bigtext(4, 4, s"boom", BC_WHITE);
+				display_put_bigtext(0, 13, s"crash", BC_WHITE);
+
+				maze_flip();
+				Player.w = (Player.w + ((30 - GameTime) >> 2)) & 63;
+
+				GameTime++;
+			}
+			break;
+		case GS_TIMEOUT:
+			if (GameTime == 30)
+			{
+				joy_poll(0);
+				if (!joyb[0])
+					game_advance(GS_RETRY);				
+			}
+			else
+			{
+				maze_draw();
+
+				display_put_bigtext(4, 4, s"outa", BC_WHITE);
+				display_put_bigtext(4, 13, s"time", BC_WHITE);
 
 				maze_flip();
 				player_move();
@@ -388,26 +581,7 @@ void game_loop(void)
 				GameTime++;
 			}
 			break;
-		case GC_TIMEOUT:
-			if (GameTime == 60)
-			{
-				display_reset();
-				game_advance(GS_REVEAL);				
-			}
-			else
-			{
-				maze_draw();
-
-				display_put_bigtext(4, 4, s"outa");
-				display_put_bigtext(4, 13, s"time");
-
-				maze_flip();
-				player_move();
-
-				GameTime++;
-			}
-			break;
-		case GC_FINISHED:
+		case GS_FINISHED:
 			if (GameTime == 30)
 			{
 				GameLevel++;
@@ -416,18 +590,37 @@ void game_loop(void)
 			}
 			else
 			{
+				display_five_star(GameTime * 8);
+				maze_flip();
+				GameTime++;
+			}
+			break;
+		case GS_RETRY:
+			if (GameTime == 120 || joyb[0])
+			{
+				display_reset();
+				game_advance(GS_BUILD);				
+			}
+			else
+			{
 				maze_draw();
 
-				display_put_bigtext(0, 4, s"found");
-				display_put_bigtext(4, 13, s"exit");
+				display_put_bigtext(0, 4, s"retry", GameSelect ? BC_BLACK : BC_WHITE);
+				display_put_bigtext(4, 13, s"exit", GameSelect ? BC_WHITE : BC_BLACK);
 
 				maze_flip();
 				player_move();
 
+				joy_poll(0);
+				if (joyy[0] > 0)
+					GameSelect = 1;
+				else if (joyy[0] < 0)
+					GameSelect = 0;
+
 				GameTime++;
 			}
 			break;
-		case GC_GAMEOVER:
+		case GS_GAMEOVER:		
 			break;
 	}
 }
@@ -448,7 +641,6 @@ int main(void)
     rcast_init_tables();
     rcast_init_fastcode();
 
-	music_patch_voice3(false);
 
 	game_advance(GS_INTRO);
 

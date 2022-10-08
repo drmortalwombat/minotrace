@@ -16,6 +16,11 @@ unsigned int maze_rand(void)
 	return maze_seed;
 }
 
+unsigned int maze_randb(char limit)
+{
+	return maze_rand() % limit;
+}
+
 
 bool maze_inside(int ipx, int ipy)
 {
@@ -27,6 +32,12 @@ MazeFields maze_field(int ipx, int ipy)
 {
 	char	ix = ipx >> 8, iy = ipy >> 8;
 	return (MazeFields)(maze_grid[iy * 256 + ix]);
+}
+
+void maze_set(int ipx, int ipy, MazeFields f)
+{
+	char	ix = ipx >> 8, iy = ipy >> 8;
+	maze_grid[iy * 256 + ix] = f;
 }
 
 static const char mazelut[] = {
@@ -194,6 +205,8 @@ void maze_print(void)
 }
 
 int bdir[4] = {1, 256, -1, -256};
+int bdir2[4] = {2, 512, -2, -512};
+int bdir4[4] = {4, 1024, -4, -1024};
 
 bool maze_check(int p, char d)
 {
@@ -203,27 +216,45 @@ bool maze_check(int p, char d)
 
 	int	d0 = bdir[(d + 1) & 3], d1 = bdir[(d + 3) & 3];
 
-	return 
-		maze_grid[p1] == 0xff &&
-		maze_grid[p1 + d0] >= 0xfe &&
-		maze_grid[p1 + d1] >= 0xfe &&
-		maze_grid[p1 + 2 * d0] >= 0xfe &&
-		maze_grid[p1 + 2 * d1] >= 0xfe &&
-		maze_grid[p2] >= 0xfe &&
-		maze_grid[p2 + d0] >= 0xfe &&
-		maze_grid[p2 + d1] >= 0xfe &&
-		maze_grid[p2 + 2 * d0] >= 0xfe &&
-		maze_grid[p2 + 2 * d1] >= 0xfe &&
-		maze_grid[p3] >= 0xfe &&
-		maze_grid[p3 + d0] >= 0xfe &&
-		maze_grid[p3 + d1] >= 0xfe;
+	if (maze_grid[p1] != 0xff)
+		return false;
+
+	if (maze_grid[p1 + d0] < 0xfe)
+		return false;
+	if (maze_grid[p1 + d0] == 0xff && maze_grid[p1 + 2 * d0] < 0xfe)
+		return false;
+	if (maze_grid[p1 + d1] < 0xfe)
+		return false;
+	if (maze_grid[p1 + d1] == 0xff && maze_grid[p1 + 2 * d1] < 0xfe)
+		return false;
+
+	if (maze_grid[p2] == 0xfe)
+		return true;
+
+	if (maze_grid[p2 + d0] < 0xfe)
+		return false;
+	if (maze_grid[p2 + d0] == 0xff && maze_grid[p2 + 2 * d0] < 0xfe)
+		return false;
+	if (maze_grid[p2 + d1] < 0xfe)
+		return false;
+	if (maze_grid[p2 + d1] == 0xff && maze_grid[p2 + 2 * d1] < 0xfe)
+		return false;
+
+	if (maze_grid[p3] == 0xfe)
+		return true;
+
+	if (maze_grid[p3 + d0] < 0xfe)
+		return false;
+	if (maze_grid[p3 + d1] < 0xfe)
+		return false;
+
+	return true;
 }
 
 bool maze_check_3(int p, char d)
 {
 	int p1 = p + bdir[d];
 	int p2 = p1 + bdir[d];
-	int p3 = p2 + bdir[d];
 
 	int	d0 = bdir[(d + 1) & 3], d1 = bdir[(d + 3) & 3];
 
@@ -234,6 +265,24 @@ bool maze_check_3(int p, char d)
 		maze_grid[p2] >= 0xfe &&
 		maze_grid[p2 + d0] >= 0xfe &&
 		maze_grid[p2 + d1] >= 0xfe;
+}
+
+bool maze_check_3by4(int p, char d)
+{
+	int p1 = p + bdir4[d];
+	int p2 = p1 + bdir4[d];
+
+	int	d0 = bdir4[(d + 1) & 3], d1 = bdir4[(d + 3) & 3];
+
+	return 
+		p1 >= 0 &&
+		maze_grid[p1] == 0xff &&
+		maze_grid[p1 + d0] >= 0xfe &&
+		maze_grid[p1 + d1] >= 0xfe &&
+		(p2 < 0 ||
+			maze_grid[p2] >= 0xfe &&
+			maze_grid[p2 + d0] >= 0xfe &&
+			maze_grid[p2 + d1] >= 0xfe);
 }
 
 void maze_build_border(unsigned size, char fill, char border)
@@ -257,7 +306,10 @@ void maze_build_border(unsigned size, char fill, char border)
 void maze_build_exit(void)
 {
 	for(char i=0; i<8; i++)
+	{
 		maze_grid[8 * 256 + i * 256 + maze_size - 1] = MF_EXIT;
+		maze_grid[8 * 256 + i * 256 + maze_size - 2] = MF_EMPTY;
+	}
 	maze_grid[11 * 256 + 1] = MF_EMPTY;
 	maze_grid[12 * 256 + 1] = MF_EMPTY;	
 }
@@ -270,11 +322,11 @@ void maze_build_minefield(unsigned size)
 	{
 		for(char j=0; j<8; j++)
 		{
-			char x = maze_rand() % 23 + 1;
+			char x = maze_randb(23) + 1;
 			maze_grid[256 * x + i] = MF_RED + 4 * (j & 1);
 		}
 
-		char x = maze_rand() % 23 + 1;
+		char x = maze_randb(23) + 1;
 		maze_grid[256 * x + i] = MF_MINE;
 	}
 
@@ -300,7 +352,7 @@ void maze_build_cross(unsigned size)
 
 		for(char j=0; j<2; j++)
 		{
-			char x = (maze_rand() % 6) * 4 + 3 - sx;
+			char x = maze_randb(6) * 4 + 3 - sx;
 			maze_grid[256 * x + i + 1] = MF_PURPLE;
 		}
 	}
@@ -342,11 +394,13 @@ void maze_build_labyrinth_3(unsigned size)
 						else
 						{
 							maze_grid[i * 256 + j] = MF_EMPTY;
-							maze_grid[i * 256 + j - 256] = MF_EMPTY;
+							if (i > 1)
+								maze_grid[i * 256 + j - 256] = MF_EMPTY;
 							if (j > 1)
 							{
 								maze_grid[i * 256 + j - 1] = MF_EMPTY;
-								maze_grid[i * 256 + j - 257] = MF_EMPTY;
+								if (i > 1)
+									maze_grid[i * 256 + j - 257] = MF_EMPTY;
 							}
 						}
 					}
@@ -376,9 +430,11 @@ void maze_build_labyrinth_1(unsigned size)
 		char d = maze_rand() & 3;
 
 		char i = 0;
+		char dd = 1 + (maze_rand() & 2);
+
 		while (i < 4 && !maze_check_3(p, d))
 		{
-			d = (d + 1) & 3;
+			d = (d + dd) & 3;
 			i++;
 		}
 
@@ -422,9 +478,6 @@ void maze_build_path(const char * kns, char steps, char sel, char wall, unsigned
 	int k0 = kns[0];
 	bool	t0 = true, t1 = true;
 
-	for(int i=0; i<40; i++)
-		maze_rand();
-
 	for(unsigned i=1; i<size - 1; i++)
 	{
 		char j = i & (steps - 1);
@@ -466,31 +519,13 @@ void maze_build_path(const char * kns, char steps, char sel, char wall, unsigned
 void maze_build_curves_1(unsigned size)
 {
 	static const char	kns[16] = {12, 12, 12, 11, 9, 7, 5, 3, 2, 2, 2, 3, 5, 7, 9, 11};
-
-//	for(int i=0; i<16; i++)
-//		kns[i] = 7 + 5 * sin((i + 3) * (PI / 8));
-
 	maze_build_path(kns, 16, 5, 13, size);
-}
-
-void maze_build_curves_3(unsigned size)
-{
-	char	kns[32];
-
-	for(int i=0; i<32; i++)
-		kns[i] = 7 + 5 * sin((i + 3) * (PI / 16));
-
-	maze_build_path(kns, 32, 5, 26, size);
 }
 
 void maze_build_curves_2(unsigned size)
 {
-	static const char	kns[16] = {12, 8, 5, 3, 2, 3, 5, 8, 12, 16, 19, 21, 22, 21, 19, 16};
-
-//	for(int i=0; i<16; i++)
-//		kns[i] = 12 - 10 * sin(i * (PI / 16));
-
-	maze_build_path(kns, 16, 0, 0, size);
+	static const char	kns[16] = {12, 8, 5, 3, 2, 3, 5, 8, 12, 15, 18, 20, 21, 20, 18, 15};
+	maze_build_path(kns, 16, 1, 0, size);
 }
 
 
@@ -499,7 +534,7 @@ void maze_build_gates(unsigned size)
 	maze_build_border(size, MF_EMPTY, MF_PURPLE);
 
 	signed char	x = 6;
-	for(int i=1; i + 3 < size; i+=3)
+	for(int i=1; i + 2 < size; i+=3)
 	{
 
 		for(int k=1; k<24; k++)
@@ -526,9 +561,78 @@ void maze_build_gates(unsigned size)
 
 		}
 
-		x = x - 5 + maze_rand() % 10;
+		x = x - 5 + maze_randb(10);
 		if (x < 1) x = 6;
 		if (x > 12) x = 7;
+	}
+
+	maze_build_exit();	
+}
+
+void maze_build_doors(unsigned size)
+{
+	maze_build_border(size, MF_EMPTY, MF_PURPLE);
+
+	for(int i=4; i + 4 < size; i+=4)
+	{
+		for(int k=1; k<24; k++)
+		{
+			maze_grid[256 * k + i + 0] = MF_RED + 4 * (k & 1);
+		}
+	}
+
+	for(int i=4; i+4 < 25; i+=4)
+	{
+		for(int k=1; k+1<size; k++)
+		{
+			maze_grid[256 * i + k + 0] = MF_RED + 4 * (k & 1);
+		}		
+	}
+
+	for(int i=0; i < size + 4; i+=4)
+	{
+		for(int k=0; k<25; k+=4)
+		{
+			maze_grid[256 * k + i + 0] = 
+				(i == 0 || i > size || k == 24) ? 0xfe : 0xff;
+		}
+	}
+
+	int	p = 256 * 12 + 4;
+	maze_grid[p] = 0xfc;
+
+	for(;;)
+	{
+		char d = maze_rand() & 3;
+
+		char i = 0;
+		while (i < 4 && !maze_check_3by4(p, d))
+		{
+			d = (d + 1) & 3;
+			i++;
+		}
+
+		if (i == 4)
+		{
+			p -= bdir4[maze_grid[p]];
+			if (maze_grid[p] == 0xfc)
+			{
+				for(int i=0; i < size; i+=4)
+				{
+					for(int k=0; k<25; k+=4)
+						maze_grid[256 * k + i + 0] = MF_RED;
+				}
+
+				maze_build_exit();
+				return;
+			}
+		}
+		else
+		{			
+			maze_grid[p + 510 + bdir2[d]] = MF_EMPTY;
+			p += bdir4[d];
+			maze_grid[p] = d;
+		}
 	}
 
 	maze_build_exit();	
@@ -548,6 +652,7 @@ void maze_build(const MazeInfo * info)
 			maze_build_labyrinth_3(info->size + 2);
 			break;
 		case MGEN_DOORS:
+			maze_build_doors(info->size + 2);
 			break;
 		case MGEN_MINEFIELD:
 			maze_build_minefield(info->size + 2);
