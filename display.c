@@ -13,12 +13,15 @@ const char SpriteData[] = {
 };
 #pragma data(data)
 
+#pragma data(tables)
 const char WallFontData[] = {
 	#embed ctm_chars "walls.ctm"
 };
+#pragma data(data)
 
-bool time_running;
+bool 		time_running;
 signed char	time_digits[5];
+bool		ntsc;
 
 RIRQCode	IRQFrame;
 
@@ -31,6 +34,8 @@ const char DataTitleBits[] = {
 	#embed 8000 0 lzo "titleimg.bin"
 };
 
+#pragma data(tables)
+
 const char DataTitleColor0[] = {
 	#embed 1000 8000 lzo "titleimg.bin"
 };
@@ -38,10 +43,17 @@ const char DataTitleColor0[] = {
 const char DataTitleColor1[] = {
 	#embed 1000 9000 lzo "titleimg.bin"
 };
+#pragma data(data)
 
+// Expand the font for the wall characters
 void display_font_expand(void)
 {
+	// Copy the first 32 characters verbatim from the
+	// static character set
 	memcpy(Font, WallFontData, 32 * 8);
+
+	// Expand the remaining 13 characters into 16 characters each for
+	// top, inner and bottom of a wall segment
 
 	for(char c=0; c<13; c++)
 	{
@@ -51,27 +63,29 @@ void display_font_expand(void)
 		{
 			char * fp = Font + 8 * (cy + 16 * c + 0x30);
 
+			// Upper wall character
 			for(char t=0; t<8; t++)
 			{
 
 				if (t > 7 - cy)
-					fp[t + 64] = sp[t];
+					fp[t + 64] = sp[t];	// Inside wall
 				else if (t == 7 - cy)
-					fp[t + 64] = 0xff;
+					fp[t + 64] = 0xff;  // Upper white border line
 				else
-					fp[t + 64] = 0x00;
+					fp[t + 64] = 0x00;	// Black ceiling
 			}
 
+			// Inner and bottom wall characters
 			for(char t=0; t<8; t++)
 			{
 				if (cy == 0)
-					fp[t] = sp[t];
+					fp[t] = sp[t];		// Full wall segment
 				else if (t < cy)
-					fp[t] = sp[t];
+					fp[t] = sp[t];		// Inside wall
 				else if (t == cy)
-					fp[t] = 0x00;
+					fp[t] = 0x00;		// Black bottom line of wall
 				else
-					fp[t] = b[t & 1];
+					fp[t] = b[t & 1];	// Checkered floor
 			}
 		}
 	}
@@ -80,54 +94,97 @@ void display_font_expand(void)
 
 void display_init(void)
 {
+	__asm {
+		sei
+	}
+
 	cia_init();
 
-	mmap_set(MMAP_ROM);
-
-	rirq_init_memmap();
-
-	vic.ctrl1 = VIC_CTRL1_RSEL + 3;
+	// Detect PAL or NTSC
+	vic_waitTop();
 	vic_waitBottom();
+	char	max = 0;
+	while (vic.ctrl1 & VIC_CTRL1_RST8)
+	{
+		if (vic.raster > max)
+			max = vic.raster;
+	}
 
-	mmap_set(MMAP_RAM);
+	ntsc = max < 8;
 
-	oscar_expand_lzo(Sprites, SpriteData);
-
+	// Bank out ROM
 	mmap_set(MMAP_NO_ROM);
 
+	// Init raster IRQ with memory map handler	
+	rirq_init_memmap();
+
+	// Black border and display off during initialization
+	vic.color_border = VCOL_BLACK;
+	vic.ctrl1 = VIC_CTRL1_RSEL + 3;
+
+	vic_waitBottom();
+
+	// Turn off IO range at 0xd000
+	mmap_set(MMAP_RAM);
+
+	// Expand sprite data into RAM under IO area
+	oscar_expand_lzo(Sprites, SpriteData);
+
+	// Turn IO area back on
+	mmap_set(MMAP_NO_ROM);
+
+	// Init sound system
 	music_init(TUNE_GAME_2);
 	sidfx_init();
 	sid.fmodevol = 15;	
 
+	// Build raster interrupt for double buffer page flip at top
+	// of screen
 	rirq_build(&IRQFrame, 2);
 	rirq_write(&IRQFrame, 0, &vic.memptr, 0x06);
 	rirq_call(&IRQFrame, 1, irq_service);
 
-	rirq_set(0, 250, &IRQFrame);
+	rirq_set(0, 5, &IRQFrame);
 
+	// Start raster IRQ processing
 	rirq_sort();
 	rirq_start();
 
+	// Turn of IO range
 	mmap_set(MMAP_RAM);
 
+	// Expand font into IO range
 	display_font_expand();
 
+	// Turn IO area back on
 	mmap_set(MMAP_NO_ROM);
 
+	// Init sprite sub system
 	spr_init(Screen);
 }
 
 char title_char_buffer[64];
 
+// Expand character for title scroller
+
 void title_char_expand(char c)
 {
+	// Bank in character ROM
+
 	mmap_set(MMAP_CHAR_ROM);
+
+	// Start address of character in ROM
 
 	const char * sp = (char *)0xd000 + 8 * c;
 
+	// Eight rows
+
 	for(char iy=0; iy<8; iy++)
 	{
+		// Character definition byte of this row		
 		char b = sp[iy];
+
+		// Expand into a bit of eight bytes
 		for(char ix=0; ix<8; ix++)
 		{
 			unsigned	u = (title_char_buffer[40 + ix] << 8) | b;
@@ -137,9 +194,12 @@ void title_char_expand(char c)
 		}
 	}
 
+	// Bank out character ROM
+
 	mmap_set(MMAP_NO_ROM);
 }
 
+// Title color change color lookup table
 const char ctitlelut[16] = {
 	VCOL_BLACK,
 	VCOL_WHITE,
@@ -160,50 +220,131 @@ const char ctitlelut[16] = {
 	VCOL_LT_GREY
 };
 
+// Game completed change color lookup table
+const char ccompllut[16] = {
+	VCOL_BLACK,
+	VCOL_WHITE,
+	VCOL_DARK_GREY,
+	VCOL_CYAN,
+	VCOL_PURPLE,
+	VCOL_GREEN,
+	VCOL_BLUE,
+	VCOL_WHITE,
+
+	VCOL_MED_GREY,
+	VCOL_DARK_GREY,
+	VCOL_LT_GREY,
+	VCOL_DARK_GREY,
+	VCOL_MED_GREY,
+	VCOL_LT_GREEN,
+	VCOL_LT_BLUE,
+	VCOL_LT_GREY
+};
+
+// Color change lookup table for title scroller
 char titlelut[256];
 
 #pragma align(titlelut, 256);
 
+// Expand the title text row into the color ram of the
+// multicolor title screen
+
 void title_line_expand(void)
 {	
-	char * sdp = Screen + 16 * 40, * cdp = Color + 16 * 40;
+	// Target address
+	char * sdp = Screen + 12 * 40, * cdp = Color + 12 * 40;
+
+	// Source address
 	char * ssp = Screen2, * csp = Screen2 + 512;
 
+	// Fourty columns
 	for(char ix=0; ix<40; ix++)
 	{
+		// Get byte with one bit per row
 		unsigned m = title_char_buffer[ix];
+
 		#pragma unroll(full)
 		for(char iy=0; iy<8; iy++)
 		{
+			// Shift char byte left
 			m <<= 1;
+			// Check "carry"
 			bool	b = (m & 0x0100) != 0;
+
+			// Get source color
 			char	sc = ssp[40 * iy + ix], cc = csp[40 * iy + ix];
 
+			// Replace color if bit is set
 			sc = b ? titlelut[sc] : sc;
 			cc = b ? titlelut[cc] : cc;
 
+			// Write target color
 			sdp[40 * iy + ix] = sc;
 			cdp[40 * iy + ix] = cc;
 		}
 	}
 
+	// Scroll title line to the left
 	for(char ix=0; ix<48; ix++)
 		title_char_buffer[ix] = title_char_buffer[ix + 1];
 }
 
-const char  Text[] =
-	S"RACE AGAINST THE CLOCK TO ESCAPE FROM THE EVIL DUNGEONS --- "
+const char  TitleText[] =
+	S"RACE AGAINST THE CLOCK TO ESCAPE FROM THE CONVOLUTED DUNGEONS OF THE RAINBOW ZEBRA --- "
 	S"DESIGN AND CODING BY DR.MORTAL WOMBAT, MUSIC BY CRISPS --- "
 	S"VISIT US ON ITCH.IO FOR MORE --- "
-	S"GREETZ TO ECTE, SEPA, STEPZ AND PIGEON64 --- ";
+	S"USE JOYSTICK TO STEER, PUSH BUTTON TO SPEED UP --- "
+	S"GREETZ TO ECTE, SEPA, STEPZ AND PIGEON64 ---                        ";
 
-void display_title(void)
+const char  CompleteText[] =
+	S"CONGRATULATIONS YOU COMPLETED ALL THE MAZES IN TIME --- ";
+
+// Scroll the title text until user presses joystick button
+void display_scroll_title(const char * text)
 {
+	bool	down = true;
+
+	char x = 0, lx = 0;
+	do {
+		// Wait for top line of title text
+		vic_waitTop();
+		vic_waitLine(200);
+
+		// Expand line into color buffer
+		title_line_expand();
+		lx ++;
+		if (lx == 8)
+		{
+			// Expand one character after eight scrolls
+			title_char_expand(text[x]);
+			x++;
+			lx = 0;
+			if (!text[x])
+				x = 0;
+		}
+
+		// Check joystick
+		joy_poll(0);
+
+		// Wait for up before accepting down
+		if (!joyb[0])
+			down = false;
+
+	} while (down || !joyb[0]);
+}
+
+void display_show_title(void)
+{
+	// Turn off all sprite
+	vic.spr_enable = 0;
+
+	// Turn of display during init
 	vic_waitBottom();
 	vic.ctrl1 = VIC_CTRL1_RSEL + 3;
 	vic_waitTop();
 	vic_waitBottom();
 
+	// Expand bitmap and color data
 	oscar_expand_lzo(Hires, DataTitleBits);
 
 	oscar_expand_lzo(Screen, DataTitleColor0);
@@ -212,52 +353,70 @@ void display_title(void)
 	vic.color_border = VCOL_BLACK;
 	vic.color_back = VCOL_BLACK;
 
+	// Display multicolor bitmap screen
 	vic_setmode(VICM_HIRES_MC, Screen, Hires);
 	rirq_data(&IRQFrame, 0, 0x28);
 
-	memcpy(Screen2, Screen + 16 * 40, 8 * 40);
-	memcpy(Screen2 + 512, Color + 16 * 40, 8 * 40);	
+	// Copy color into back buffer for scrolling
+	memcpy(Screen2, Screen + 12 * 40, 8 * 40);
+	memcpy(Screen2 + 512, Color + 12 * 40, 8 * 40);	
+}
 
+void display_title(void)
+{
+	display_show_title();
+
+	// Prepare full byte LUT for scroller
 	for(int i=0; i<256; i++)
 	{
 		titlelut[i] = ctitlelut[i & 0x0f] | (ctitlelut[i >> 4] << 4);
 	}
 
-	char x = 0, lx = 0;
-	do {
-		vic_waitTop();
-		vic_waitBottom();
-		vic.color_border++;
-		title_line_expand();
-		vic.color_border++;
-		lx ++;
-		if (lx == 8)
-		{
-			title_char_expand(Text[x]);
-			x++;
-			lx = 0;
-			if (!Text[x])
-				x = 0;
-		}
-		vic.color_border--;
-		vic.color_border--;
+	memset(title_char_buffer, 0, 64);
 
-		joy_poll(0);
-	} while (!joyb[0]);
+	display_scroll_title(TitleText);
+}
+
+void display_completed(void)
+{
+	display_show_title();
+
+	// Prepare full byte LUT for scroller
+	for(int i=0; i<256; i++)
+	{
+		titlelut[i] = ccompllut[i & 0x0f] | (ccompllut[i >> 4] << 4);
+	}
+
+	memset(title_char_buffer, 0, 64);
+
+	// Show DrMortalWombat and Crisps sprites
+	spr_set(0, true, 24 + 126, 50 + 70, 64 + 25, VCOL_BLACK, false, false, false);
+	spr_set(1, true, 24 + 126, 50 + 70, 64 + 24, VCOL_GREEN, true, false, false);
+
+	spr_set(2, true, 24 + 210, 50 + 70, 64 + 27, VCOL_BLACK, false, false, false);
+	spr_set(3, true, 24 + 210, 50 + 70, 64 + 26, VCOL_ORANGE, true, false, false);
+
+	vic.spr_mcolor0 = VCOL_BLUE;
+	vic.spr_mcolor1 = VCOL_WHITE;
+
+	display_scroll_title(CompleteText);
 }
 
 void display_game(void)
 {
+	// Hide display during init
 	vic_waitBottom();
 	vic.ctrl1 = VIC_CTRL1_RSEL + 3;
 	vic_waitTop();
 	vic_waitBottom();
 
+	// Clear screen
 	memset(Screen, 0, 1000);
 	memset(Color, VCOL_WHITE + 8, 1000);
 
 	vic_waitBottom();
 
+	// Set multicolor text mode
 	vic_setmode(VICM_TEXT_MC, Screen, Font);
 	rirq_data(&IRQFrame, 0, 0x26);
 
@@ -269,35 +428,48 @@ void display_game(void)
 	vic.spr_mcolor0 = VCOL_DARK_GREY;
 	vic.spr_mcolor1 = VCOL_WHITE;
 
-	for(int i=0; i<8; i++)
+	// Prepare compass and countdown sprites
+	spr_set(0, true, 72, 50, 64 + 13, VCOL_LT_BLUE, true, false, false);
+	for(int i=1; i<8; i++)
 		spr_set(i, true, 80 + 24 * i, 50, 64 + 12, VCOL_YELLOW, true, false, false);
 }
 
+// Decrement countdown timer
 void time_dec(void)
 {
+	// Stop when out of time
 	if (time_count > 0)
 	{
-		time_count--;
+		// Decrement number of seconds, when 100th at zero
+		if (time_digits[4] == 0 && time_digits[3] == 0)
+			time_count--;
 
-		if (--time_digits[4] >= 0)
-			return;
-		time_digits[4] = 9;
+		// Still time left
+		if (time_count > 0)
+		{
+			// 100th second
+			if (--time_digits[4] >= 0)
+				return;
+			time_digits[4] = 9;
 
-		if (--time_digits[3] >= 0)
-			return;
-		time_digits[3] = 4;
+			if (--time_digits[3] >= 0)
+				return;
+			time_digits[3] = ntsc ? 5 : 4;
 
-		if (--time_digits[2] >= 0)
-			return;
-		time_digits[2] = 9;
+			// Seconds
+			if (--time_digits[2] >= 0)
+				return;
+			time_digits[2] = 9;
 
-		if (--time_digits[1] >= 0)
-			return;
-		time_digits[1] = 5;
+			if (--time_digits[1] >= 0)
+				return;
+			time_digits[1] = 5;
 
-		if (--time_digits[0] >= 0)
-			return;
-		time_digits[0] = 9;
+			// Minutes
+			if (--time_digits[0] >= 0)
+				return;
+			time_digits[0] = 9;
+		}
 	}
 }
 
@@ -310,6 +482,7 @@ void compass_draw(char w)
 {
 	char	*	sp = sprimg_base();
 
+	// Select one of eight compass sprites
 	sp[0] = 80 + (((w + 4) >> 3) & 7);
 }
 
@@ -317,6 +490,7 @@ void time_draw(void)
 {
 	char	*	sp = sprimg_base();;
 
+	// Update time sprites
 	sp[1] = 64 + time_digits[0];
 	sp[2] = 64 + 10;
 	sp[3] = 64 + time_digits[1];
@@ -328,8 +502,9 @@ void time_draw(void)
 
 void time_init(unsigned seconds)
 {
-	time_count = seconds * 50;
+	time_count = seconds + 1;
 
+	// Init time sprites
 	time_digits[3] = time_digits[4] = 0;
 	time_digits[2] = seconds % 10; seconds /= 10;
 	time_digits[1] = seconds %  6; seconds /= 6;
@@ -338,6 +513,8 @@ void time_init(unsigned seconds)
 
 __interrupt void irq_service(void)
 {
+	// Service interrupt, decrement time, and play sounds
+
 	if (time_running)
 		time_dec();
 	sidfx_loop_2();
@@ -346,6 +523,8 @@ __interrupt void irq_service(void)
 
 void display_flip(void)
 {
+	// Update raster IRQ for page flip
+
 	rirq_data(&IRQFrame, 0, (sindex >> 3) | 0x26);
 }
 
@@ -359,63 +538,88 @@ void display_reset(void)
 
 void display_put_bigtext(char x, char y, const char * text, BlockChar bc)
 {
+	// Map in character rom
 	mmap_set(MMAP_CHAR_ROM);
 
+	// Hint for the compiler, max 25 rows of text on screen
 	__assume(y < 25);
 
+	// Target address of first row on screen
 	char * ldp = Screen + (sindex << 3) + 40 * y + x;
 
+	// Loop over text until terminating 0
 	char c;
 	while (c = *text++)
 	{
+		// Address of character data in rom
 		const char * sp = (char *)0xd000 + 8 * c;
 
+		// Loop over rows in character
 		char * dp = ldp;
 		for(char iy=0; iy<8; iy++)
 		{
 			char b = sp[iy];
+			// Loop over bits in character
 			for(char ix=0; ix<8; ix++)
 			{
+				// Check left most bit
 				if (b & 0x80)
 					dp[ix] = bc;
 				b <<= 1;
 			}
+			// Next row
 			dp += 40;
 		}
+		// Next char
 		ldp += 8;
 	}
 
+	// Map IO space back in
 	mmap_set(MMAP_NO_ROM);
 }
 
 void display_scroll_left(void)
 {
+	// Copy is unrolled in three sections to race the beam
 	for(char j=0; j<39; j++)
 	{
 		#pragma unroll(full)
-		for(char i=0; i<12; i++)
+		for(char i=0; i<7; i++)
 			Screen[40 * i + j] = Screen[40 * i + j + 1];
 	}
 	for(char j=0; j<39; j++)
 	{
 		#pragma unroll(full)
-		for(char i=12; i<25; i++)
+		for(char i=7; i<15; i++)
+			Screen[40 * i + j] = Screen[40 * i + j + 1];
+	}
+	for(char j=0; j<39; j++)
+	{
+		#pragma unroll(full)
+		for(char i=15; i<25; i++)
 			Screen[40 * i + j] = Screen[40 * i + j + 1];
 	}
 }
 
 void display_scroll_right(void)
 {
+	// Copy is unrolled in three sections to race the beam
 	for(signed char j=38; j>=0; j--)
 	{
 		#pragma unroll(full)
-		for(char i=0; i<12; i++)
+		for(char i=0; i<7; i++)
 			Screen[40 * i + j + 1] = Screen[40 * i + j];
 	}
 	for(signed char j=38; j>=0; j--)
 	{
 		#pragma unroll(full)
-		for(char i=12; i<25; i++)
+		for(char i=7; i<15; i++)
+			Screen[40 * i + j + 1] = Screen[40 * i + j];
+	}
+	for(signed char j=38; j>=0; j--)
+	{
+		#pragma unroll(full)
+		for(char i=15; i<25; i++)
 			Screen[40 * i + j + 1] = Screen[40 * i + j];
 	}
 }
@@ -454,20 +658,25 @@ static const char display_five_table[] = {
 
 void display_five_star(char t)
 {
+	// Base pointer on screen
 	char * ldp = Screen + (sindex << 3);
 
+	// Unroll into page size segments (4 times unrolled with 0..249 loop counter)
 	#pragma unroll(page)
 	for(int i=0; i<1000; i++)
 	{
+		// Draw white inside of star
 		ldp[i] = display_five_table[i] < t ? BC_WHITE : BC_BLACK;
 	}
 }
 
 void display_explosion(void)
 {
+	// Velocity and position of explosion particles
 	signed char	dx[128], dy[128];
 	char		xp[128], yp[128];
 
+	// Initialize particles
 	for(char i=0; i<128; i++)
 	{
 		char s = i & 63;
@@ -477,18 +686,22 @@ void display_explosion(void)
 		dy[i] = (sintab[s] >> 3) - 8;
 	}
 
+	// Loop 20 times over all particles
 	char * ldp = Screen + (sindex << 3);
 	for(int j=0; j<20; j++)
 	{
 		for(char i=0; i<128; i++)
 		{
+			// Particle still visible?
 			if (yp[i] < 192)
 			{
+				// Erase particle from screen
 				ldp[40 * (yp[i] >> 3) + (xp[i] >> 2)] = BC_BLACK;
 
+				// Move
 				int	x = xp[i] + (dx[i] >> 2), y = yp[i] + (dy[i] >> 2);
 
-
+				// Check if particle left screen
 				if (y < 0 || y >= 192 || x < 0 || x >= 160)
 					yp[i] = 255;
 				else
@@ -496,10 +709,14 @@ void display_explosion(void)
 					xp[i] = x;
 					yp[i] = y;
 
+					// Draw particle
 					ldp[40 * (y >> 3) + (x >> 2)] = BC_WHITE;
 
+					// Increase speed
 					dx[i] += (dx[i] >> 2);
 					dy[i] += (dy[i] >> 2);
+
+					// Gravity
 					dy[i] += 8;
 				}
 			}

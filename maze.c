@@ -4,10 +4,11 @@
 #include <math.h>
 
 char 			maze_grid[256 * 25];
-extern unsigned maze_size;
+unsigned 		maze_size;
 
 static unsigned maze_seed = 31232;
 
+// Maze generator random function
 unsigned int maze_rand(void)
 {
     maze_seed ^= maze_seed << 7;
@@ -15,6 +16,8 @@ unsigned int maze_rand(void)
     maze_seed ^= maze_seed << 8;
 	return maze_seed;
 }
+
+// Random number in the range 0..limit-1
 
 unsigned int maze_randb(char limit)
 {
@@ -40,6 +43,7 @@ void maze_set(int ipx, int ipy, MazeFields f)
 	maze_grid[iy * 256 + ix] = f;
 }
 
+// Char lookup table for maze preview
 static const char mazelut[] = {
 	0x10, 0x06, 0x05, 0x00,
 	0x12, 0x15, 0x18, 0x1b
@@ -47,26 +51,36 @@ static const char mazelut[] = {
 
 void maze_preview(void)
 {
+	// Switch from autoscroll to user scroll, when user pushes joystick direction
 	bool		autoscroll = true;
 	char		lx = 0;
 	int			mx = -1;
 
+	// Joystick button may be pressed on entering the function
+	bool	down = true;
+
+	// Screen to 38 columns to enable pixel level scrolling
 	vic.ctrl2 = VIC_CTRL2_MCM;
+
 	for(;;)
 	{
 		if (autoscroll)
 		{
+			// Autoscroll by four pixels per frame
 			vic_waitTop();
 			vic_waitBottom();
 			vic.ctrl2 = VIC_CTRL2_MCM + 4;
 			display_scroll_left();
 
+			// Check for completion of preview
 			mx++;
 			if (mx == maze_size + 40)
 				break;			
 
+			// Prepare new column to the right
 			if (mx < maze_size)
 			{
+				// Expand full column display
 				#pragma unroll(full)
 				for(char j=0; j<25; j++)
 				{
@@ -76,27 +90,36 @@ void maze_preview(void)
 			}
 			else
 			{
+				// Fill in a black column outside of maze
 				#pragma unroll(full)
 				for(char j=0; j<25; j++)
 					Screen[40 * j + 39] = 0;					
 			}
 
+			// Next four pixels
 			vic_waitBottom();
 			vic.ctrl2 = VIC_CTRL2_MCM;
 		}
 
+		// Check joystick button
 		joy_poll(0);
-		if (joyb[0])
+		if (!joyb[0])
+			down = false;
+		
+		if (joyb[0] && !down)
 		{
+			// Button was up and is now down, so exit preview
 			vic.ctrl2 = VIC_CTRL2_MCM | VIC_CTRL2_CSEL;
 			return;
 		}
 		else if (joyx[0] < 0)
 		{
+			// End auto scroll
 			autoscroll = false;
 
 			if (lx < 7)
 			{
+				// Scroll one pixel to the left
 				lx++;
 				vic_waitBottom();
 				vic.ctrl2 = VIC_CTRL2_MCM + lx;
@@ -104,12 +127,14 @@ void maze_preview(void)
 			}
 			else
 			{
+				// Full column scroll and reset pixel scroller
 				vic_waitBottom();
 				vic.ctrl2 = VIC_CTRL2_MCM;
 				lx = 0;
 
 				display_scroll_right();
 
+				// New column to the left
 				mx--;
 				if (mx >= 39)
 				{
@@ -134,6 +159,7 @@ void maze_preview(void)
 
 			if (lx > 0)
 			{
+				// Scroll one pixel to the right
 				lx--;
 				vic_waitBottom();
 				vic.ctrl2 = VIC_CTRL2_MCM + lx;
@@ -141,12 +167,14 @@ void maze_preview(void)
 			}
 			else
 			{
+				// Full column scroll and reset pixel scroller
 				vic_waitBottom();
 				vic.ctrl2 = VIC_CTRL2_MCM + 7;
 				lx = 7;
 
 				display_scroll_left();
 
+				// New column to the right
 				mx++;
 				if (mx < maze_size)
 				{
@@ -285,11 +313,14 @@ bool maze_check_3by4(int p, char d)
 			maze_grid[p2 + d1] >= 0xfe);
 }
 
+// Build an empty maze with border
 void maze_build_border(unsigned size, char fill, char border)
 {
+	// Fill inner area
 	memset(maze_grid, fill, 25 * 256);
 	maze_size = size;
 
+	// Fill borders
 	for(int i=0; i<24; i++)
 	{
 		maze_grid[i * 256 + 0] = border;
@@ -303,6 +334,7 @@ void maze_build_border(unsigned size, char fill, char border)
 	}
 }
 
+// Add exit blocks and clear area in front
 void maze_build_exit(void)
 {
 	for(char i=0; i<8; i++)
@@ -314,18 +346,22 @@ void maze_build_exit(void)
 	maze_grid[12 * 256 + 1] = MF_EMPTY;	
 }
 
+// Build a maze with mines
 void maze_build_minefield(unsigned size)
 {
 	maze_build_border(size, MF_EMPTY, MF_PURPLE);
 
+	// For each column
 	for(unsigned i=1; i<size-1; i++)
 	{
+		// Place eight random blocks
 		for(char j=0; j<8; j++)
 		{
 			char x = maze_randb(23) + 1;
 			maze_grid[256 * x + i] = MF_RED + 4 * (j & 1);
 		}
 
+		// Place one mine
 		char x = maze_randb(23) + 1;
 		maze_grid[256 * x + i] = MF_MINE;
 	}
@@ -418,20 +454,28 @@ void maze_build_labyrinth_3(unsigned size)
 	}
 }
 
+// Build labyrinth with one wide path
 void maze_build_labyrinth_1(unsigned size)
 {
 	maze_build_border(size, 0xff, 0xfe);
 
+	// Start position of path
 	int	p = 256 * 12 + size / 2;
+
+	// Mark start field
 	maze_grid[p] = 0xfc;
 
 	for(;;)
 	{
+		// Random direction to look at first
 		char d = maze_rand() & 3;
 
 		char i = 0;
+
+		// Rotation to look around if no path forward
 		char dd = 1 + (maze_rand() & 2);
 
+		// Find a path forward by looking in all four directions
 		while (i < 4 && !maze_check_3(p, d))
 		{
 			d = (d + dd) & 3;
@@ -440,11 +484,15 @@ void maze_build_labyrinth_1(unsigned size)
 
 		if (i == 4)
 		{
+			// No path possible, backtrack			
 			p -= bdir[maze_grid[p]];
+
 			if (maze_grid[p] == 0xfc)
 			{
+				// Back at start location, clear it
 				maze_grid[p] = 0;
 
+				// Fill maze with alternating color blocks
 				for(int i=0; i<25; i++)
 				{
 					for(int j=0; j<size; j++)
@@ -462,7 +510,9 @@ void maze_build_labyrinth_1(unsigned size)
 		}
 		else
 		{			
+			// Move along selected direction
 			p += bdir[d];
+			// Remember direction, that brought us here for back tracking
 			maze_grid[p] = d;
 		}
 	}
@@ -641,8 +691,10 @@ void maze_build_doors(unsigned size)
 
 void maze_build(const MazeInfo * info)
 {
+	// Set seed for maze random generator
 	maze_seed = info->seed;
 
+	// Build maze with requested generator
 	switch(info->gen)
 	{
 		case MGEN_LABYRINTH_1:
@@ -671,6 +723,7 @@ void maze_build(const MazeInfo * info)
 			break;
 	}
 
+	// Extract colors
 	vic.color_back1 = info->colors >> 4;
 	vic.color_back2 = info->colors & 0x0f;
 }

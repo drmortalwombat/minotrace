@@ -19,14 +19,13 @@ enum Tune
 	TUNE_RESTART
 };
 
+// Start playback on a tune in the SID file
 void music_init(Tune tune);
 
-void music_queue(Tune tune);
-
+// Interate music
 void music_play(void);
 
-void music_toggle(void);
-
+// Disable or enable voice 3 in the SID player
 void music_patch_voice3(bool enable);
 
 #pragma compile("gamemusic.c")

@@ -28,32 +28,42 @@ enum MazeFields
 	MF_WHITE = 28
 };
 
+// Specification of a level
 struct MazeInfo
 {
-	MazeGenerator	gen;
-	unsigned		seed;
-	char			size;
-	char			colors;
-	Tune			tune;
-	char			time;
+	MazeGenerator	gen;		// Generator to use
+	unsigned		seed;		// Static seed for random generator
+	char			size;		// Size of the maze
+	char			colors;		// Back- and Frontcolor
+	Tune			tune;		// Tune to play
+	char			time;		// Countdown
 };
 
+// Data table for the maze 25 rows of 256 fields
 extern char 	maze_grid[256 * 25];
 
+// Size of the maze in columns
 extern unsigned maze_size;
 
+// Explicitly align maze data on page boundary
 #pragma align(maze_grid, 256)
 
+// Check if coordinates point to a wall
 inline bool maze_inside(int ipx, int ipy);
 
+// Change a block in the maze
 inline void maze_set(int ipx, int ipy, MazeFields f);
 
+// Get the type of a block in the maze
 inline MazeFields maze_field(int ipx, int ipy);
 
+// Allow the player to preview the maze
 void maze_preview(void);
 
+// Debug print the maze to the console
 void maze_print(void);
 
+// Build a maze from the given specification
 void maze_build(const MazeInfo * info);
 
 #pragma compile("maze.c")
